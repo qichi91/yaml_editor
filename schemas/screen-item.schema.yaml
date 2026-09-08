@@ -1,0 +1,50 @@
+schema_id: screen-item
+schema_version: "1.0"
+title: 画面項目定義書
+
+headers:
+  - key: screen_id
+    label: 画面ID
+    required: true
+  - key: screen_name
+    label: 画面名
+    required: true
+
+columns:
+  - key: id
+    label: 項目ID
+    width: 100
+    type: string
+    pattern: "^[0-9]{3}$"
+    pattern_error: "3桁の半角数値を入力してください (例: 001)"
+  - key: label
+    label: 項目名
+    width: 140
+    type: string
+    required: true
+  - key: type
+    label: 種別
+    width: 130
+    type: select
+    options: ["テキストボックス", "数値入力", "プルダウン", "チェックボックス", "ボタン", "ラベル"]
+    options_strict: true
+  - key: required
+    label: 必須
+    width: 60
+    type: select
+    options: ["○", "－"]
+  - key: description
+    label: 説明
+    type: multiline
+  - key: validation
+    label: バリデーション
+    type: multiline
+
+markdown_template: |
+  # {{screen_name}} ({{screen_id}})
+
+  | {{header_row}} |
+  | {{separator_row}} |
+  {{#items}}
+  | {{id}} | {{label}} | {{type}} | {{required}} | {{description}} | {{validation}} |
+  {{/items}}

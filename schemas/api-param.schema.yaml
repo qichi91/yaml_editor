@@ -1,0 +1,85 @@
+schema_id: api-param
+schema_version: "1.0"
+title: APIパラメータ定義書
+
+columns:
+  - key: name
+    label: 項目名
+    width: 160
+    type: string
+    required: true
+  - key: name_en
+    label: "項目名(英名)"
+    width: 160
+    type: string
+    required: true
+  - key: type
+    label: 型
+    width: 120
+    type: select
+    options:
+      - uint8_t
+      - uint16_t
+      - uint32_t
+      - uint64_t
+      - int8_t
+      - int16_t
+      - int32_t
+      - int64_t
+      - float
+      - double
+      - char
+      - std::string
+    options_strict: true
+    required: true
+  - key: key
+    label: キー
+    width: 160
+    type: select
+    options:
+      - ""
+      - "〇"
+    options_strict: true
+  - key: overview
+    label: 概要
+    width: 240
+    type: multiline
+  - key: note
+    label: 補足
+    width: 240
+    type: multiline
+
+subtables:
+  - data_key: key_items
+    title: キー一覧
+    columns:
+      - key: key
+        label: キー
+        width: 240
+        type: string
+        required: true
+      - key: overview
+        label: 概要
+        width: 240
+        type: multiline
+      - key: note
+        label: 補足
+        width: 240
+        type: multiline
+
+markdown_template: |
+  # {{title}}
+
+  | {{header_row}} |
+  | {{separator_row}} |
+  {{#items}}
+  | {{name}} | {{name_en}} | {{type}} | {{key}} | {{overview}} | {{note}} |
+  {{/items}}
+
+  ## {{key_items_title}}
+
+  | キー | 概要 | 補足 |
+  | :--- | :--- | :--- |
+  {{#key_items}}
+  | {{key}} | {{overview}} | {{note}} |
+  {{/key_items}}
