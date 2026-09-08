@@ -42,7 +42,17 @@ export async function activate(context: vscode.ExtensionContext) {
         webviewPanel.webview.options = { enableScripts: true };
 
         const htmlPath = path.join(context.extensionPath, 'media', 'editor.html');
-        webviewPanel.webview.html = fs.readFileSync(htmlPath, 'utf8');
+        const styleUri = webviewPanel.webview.asWebviewUri(
+          vscode.Uri.file(path.join(context.extensionPath, 'media', 'editor.css'))
+        );
+        const scriptUri = webviewPanel.webview.asWebviewUri(
+          vscode.Uri.file(path.join(context.extensionPath, 'media', 'editor.js'))
+        );
+        const cspSource = `default-src 'none'; style-src ${webviewPanel.webview.cspSource}; script-src ${webviewPanel.webview.cspSource};`;
+        webviewPanel.webview.html = fs.readFileSync(htmlPath, 'utf8')
+          .replace('{{styleUri}}', styleUri.toString())
+          .replace('{{scriptUri}}', scriptUri.toString())
+          .replace('{{cspSource}}', cspSource);
 
         // YAMLパース
         function parseDocument(): SpecData {

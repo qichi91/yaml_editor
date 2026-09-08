@@ -1,0 +1,159 @@
+:root {
+  --bg-color: var(--vscode-editor-background, #1e1e1e);
+  --fg-color: var(--vscode-editor-foreground, #ccc);
+  --border-color: var(--vscode-panel-border, #444);
+  --select-border: #007acc;
+  --select-bg: rgba(0, 122, 204, 0.18);
+  --header-bg: var(--vscode-editor-lineHighlightBackground, #2a2d2e);
+  --error-border: #f14c4c;
+  --error-bg: rgba(241, 76, 76, 0.15);
+}
+
+body {
+  font-family: var(--vscode-font-family, sans-serif);
+  color: var(--fg-color);
+  background-color: var(--bg-color);
+  padding: 16px;
+  margin: 0;
+  user-select: none;
+}
+
+.header-form {
+  margin-bottom: 12px;
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.header-form label {
+  font-size: 13px;
+  font-weight: bold;
+}
+
+.header-form input,
+.header-form select {
+  background: var(--vscode-input-background, #3c3c3c);
+  color: var(--vscode-input-foreground, #fff);
+  border: 1px solid var(--vscode-input-border, #555);
+  padding: 4px 8px;
+  border-radius: 2px;
+  margin-left: 6px;
+}
+
+.tip {
+  font-size: 11px;
+  color: var(--vscode-descriptionForeground, #888);
+  margin-bottom: 8px;
+}
+
+table {
+  border-collapse: collapse;
+  width: 100%;
+  table-layout: fixed;
+  background: var(--bg-color);
+}
+
+th,
+td {
+  border: 1px solid var(--border-color);
+  padding: 0;
+  position: relative;
+  vertical-align: top;
+}
+
+th {
+  background: var(--header-bg);
+  padding: 6px 8px;
+  font-size: 12px;
+  text-align: left;
+}
+
+.row-num {
+  text-align: center;
+  padding: 6px 4px;
+  color: #888;
+  font-size: 11px;
+  width: 32px;
+  background: var(--header-bg);
+}
+
+.cell-view {
+  min-height: 28px;
+  padding: 5px 7px;
+  font-size: 13px;
+  line-height: 1.4;
+  white-space: pre-wrap;
+  word-break: break-all;
+  cursor: cell;
+}
+
+td.cell-selected {
+  background-color: var(--select-bg);
+}
+
+td.cell-active {
+  outline: 2px solid var(--select-border);
+  outline-offset: -2px;
+  z-index: 2;
+}
+
+td.cell-error {
+  background-color: var(--error-bg) !important;
+  outline: 2px solid var(--error-border) !important;
+  outline-offset: -2px;
+}
+
+td.cell-error::after {
+  content: "!";
+  position: absolute;
+  right: 4px;
+  top: 4px;
+  background: var(--error-border);
+  color: #fff;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  font-size: 10px;
+  font-weight: bold;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.cell-editor {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  min-height: 100%;
+  background: var(--vscode-input-background, #252526);
+  color: var(--vscode-input-foreground, #fff);
+  border: 2px solid var(--select-border);
+  padding: 4px 6px;
+  font-family: inherit;
+  font-size: 13px;
+  box-sizing: border-box;
+  z-index: 10;
+  outline: none;
+  user-select: text;
+}
+
+textarea.cell-editor {
+  resize: none;
+}
+
+.placeholder-row {
+  opacity: 0.45;
+}
+
+.subtable-section {
+  margin-top: 24px;
+}
+
+.subtable-title {
+  font-size: 13px;
+  margin: 0 0 8px;
+}
