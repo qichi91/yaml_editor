@@ -37,8 +37,9 @@ export class MarkdownGenerator {
       const columns = dataKey === 'items'
         ? cols
         : (schema.subtables?.find(subtable => subtable.data_key === dataKey)?.columns || []);
-      return rows.map(item => {
+      return rows.map((item, rowIndex) => {
         let row = rowTemplate.trim();
+        row = row.replace(/\{\{row_number\}\}/g, String(rowIndex + 1));
         columns.forEach(column => {
           let value = (item[column.key] ?? '').toString();
           value = value.replace(/\|/g, '\\|').replace(/\r?\n/g, '<br>');

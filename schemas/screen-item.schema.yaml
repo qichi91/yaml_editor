@@ -43,8 +43,8 @@ columns:
 markdown_template: |
   # {{screen_name}} ({{screen_id}})
 
-  | {{header_row}} |
-  | {{separator_row}} |
+  | No. | {{header_row}} |
+  | :---: | {{separator_row}} |
   {{#items}}
-  | {{id}} | {{label}} | {{type}} | {{required}} | {{description}} | {{validation}} |
+  | {{row_number}} | {{id}} | {{label}} | {{type}} | {{required}} | {{description}} | {{validation}} |
   {{/items}}

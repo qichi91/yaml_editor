@@ -212,9 +212,23 @@ npm run generate:markdown
 | `{{separator_row}}` | `align` に応じた Markdown 区切り行 |
 | `{{#items}} ... {{/items}}` | メインテーブルの行繰り返し |
 | `{{#data_key}} ... {{/data_key}}` | サブテーブルの行繰り返し |
+| `{{row_number}}` | 行ブロック内の1始まりの行番号 |
 | `{{data_key_title}}` | サブテーブルの `title` |
 
 セル内の改行は `<br>` に、Markdown の `|` は `\|` に変換されます。
+
+行番号列を出力する場合は、テンプレートのヘッダーと区切り行に列を追加し、行ブロック内に `{{row_number}}` を記述します。
+
+```yaml
+markdown_template: |
+	| No. | {{header_row}} |
+	| :---: | {{separator_row}} |
+	{{#items}}
+	| {{row_number}} | {{id}} | {{label}} |
+	{{/items}}
+```
+
+`{{row_number}}` は実データのキーではなく、各行ブロックの展開時に `1` から連番で置換されます。`items` だけでなく、サブテーブルの行ブロックでも利用できます。
 
 ## インストールと開発
 
