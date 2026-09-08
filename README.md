@@ -146,7 +146,7 @@ columns:
 		type: multiline
 ```
 
-完全なサンプルは [schemas/sample-all.schema.yaml](schemas/sample-all.schema.yaml) を参照してください。既存のサンプルとして [schemas/api-param.schema.yaml](schemas/api-param.schema.yaml) と [schemas/screen-item.schema.yaml](schemas/screen-item.schema.yaml) も含まれています。
+完全なサンプルは `schemas/sample-all.schema.yaml` を参照してください。既存のサンプルとして `schemas/api-param.schema.yaml` と `schemas/screen-item.schema.yaml` も含まれています。
 
 ### `subtables`
 
@@ -254,7 +254,7 @@ npm test
 ### VSIX の作成
 
 ```bash
-npx vsce package
+npx vsce package --allow-missing-repository --skip-license
 ```
 
 生成された `.vsix` は、VS Code の「拡張機能: VSIX からのインストール」からインストールできます。
