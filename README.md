@@ -1,71 +1,247 @@
-# yaml-editor README
+# Table Spec Editor
 
-This is the README for your extension "yaml-editor". After writing up a brief description, we recommend including the following sections.
+`*.spec.yaml` / `*.spec.yml` を表形式で編集する VS Code 拡張機能です。列定義や入力チェックをプロジェクト内の `*.schema.yaml` に分離し、同じエディタで画面仕様書、API パラメータ定義書など複数の形式を扱えます。
 
-## Features
+YAML をデータの正本とし、保存時にスキーマのテンプレートから納品用 Markdown を生成します。YAML は Git で差分管理しやすい形式のまま保持できます。
 
-Describe specific features of your extension including screenshots of your extension in action. Image paths are relative to this README file.
+## 主な機能
 
-For example if there is an image subfolder under your extension project workspace:
+- `*.spec.yaml` / `*.spec.yml` を開くと、既定でテーブルエディタを表示
+- スキーマに応じたヘッダー、列、列幅、入力形式の動的な構成
+- `string`、`multiline`、`select` の入力形式
+- 必須チェック、選択肢チェック、正規表現による入力チェック
+- テーブル末尾の入力用空行と、入力時の行追加
+- 未定義の既存キーを保持したまま YAML を再保存
+- Excel との矩形コピー・貼り付け
+- `Ctrl+S` で `*.spec.md` を自動生成
 
-\!\[feature X\]\(images/feature-x.png\)
+## 基本的な使い方
 
-> Tip: Many popular extensions utilize animations. This is an excellent way to show off your extension! We recommend short, focused animations that are easy to follow.
+### 1. スキーマを配置する
 
-## Requirements
+ワークスペース内の任意の場所に `*.schema.yaml` を配置します。拡張機能は `node_modules` を除くワークスペース全体からスキーマを検索します。
 
-If you have any requirements or dependencies, add a section describing those and how to install and configure them.
+スキーマを追加・変更すると、ファイル変更を検知して再読み込みします。スキーマファイル名の拡張子は `.schema.yaml` にしてください。`.schema.yml` は検索対象外です。
 
-## Extension Settings
+### 2. spec YAML を作成する
 
-Include if your extension adds any VS Code settings through the `contributes.configuration` extension point.
+YAML の `schema` に、利用するスキーマの `schema_id` を指定します。
 
-For example:
+```yaml
+schema: screen-item
+screen_id: SCR-001
+screen_name: ユーザー登録
+items:
+	- id: "001"
+		label: ユーザー名
+		type: テキストボックス
+		required: "○"
+		description: ログインに使用する名前
+```
 
-This extension contributes the following settings:
+この例では、`schemas/screen-item.schema.yaml` の `schema_id: screen-item` が選択されます。`schema` が未指定、または一致するスキーマが存在しない場合は、汎用のフォールバック列が表示されます。
 
-* `myExtension.enable`: Enable/disable this extension.
-* `myExtension.thing`: Set to `blah` to do something.
+### 3. テーブルで編集する
 
-## Known Issues
+spec YAML を VS Code で開くと、ヘッダー入力欄とテーブルが表示されます。セルを編集すると、変更内容は YAML ドキュメントに反映されます。
 
-Calling out known issues can help limit users opening duplicate issues against your extension.
+テーブルには入力用の空行が末尾に表示されます。空行に入力すると正式な行になり、次の入力用空行が追加されます。全セルが空の行は保存データとして扱われません。
 
-## Release Notes
+スキーマ変更後も、画面に表示されない既存キーは YAML から削除されません。列定義から外れたデータを保持したまま、別のスキーマへ切り替えることもできます。
 
-Users appreciate release notes as you update your extension.
+## スキーマ定義
 
-### 1.0.0
+### スキーマ全体
 
-Initial release of ...
+```yaml
+schema_id: example
+schema_version: "1.0"
+title: サンプル仕様書
 
-### 1.0.1
+headers:
+	- key: screen_id
+		label: 画面ID
+		required: true
 
-Fixed issue #.
+columns:
+	- key: id
+		label: 項目ID
+		width: 100
+		type: string
+		required: true
+		pattern: "^[0-9]{3}$"
+		pattern_error: "3桁の半角数字を入力してください"
 
-### 1.1.0
+markdown_template: |
+	# {{title}}
 
-Added features X, Y, and Z.
+	| {{header_row}} |
+	| {{separator_row}} |
+	{{#items}}
+	| {{id}} |
+	{{/items}}
+```
 
----
+| フィールド | 必須 | 説明 |
+| :--- | :---: | :--- |
+| `schema_id` | ○ | spec YAML の `schema` と一致させる一意な識別子 |
+| `schema_version` | ○ | スキーマのバージョン文字列 |
+| `title` | ○ | Markdown 出力などで使用する仕様書名 |
+| `headers` | - | テーブル外に表示する共通入力欄 |
+| `columns` | ○ | メインテーブルの列定義 |
+| `subtables` | - | メインテーブル以外のテーブル定義 |
+| `markdown_template` | ○ | Markdown 出力テンプレート |
 
-## Following extension guidelines
+### `headers`
 
-Ensure that you've read through the extensions guidelines and follow the best practices for creating your extension.
+ヘッダー入力欄を定義します。`key` は spec YAML のトップレベルキー、`label` は画面表示名です。
 
-* [Extension Guidelines](https://code.visualstudio.com/api/references/extension-guidelines)
+```yaml
+headers:
+	- key: document_id
+		label: ドキュメントID
+		required: true
+	- key: owner
+		label: 担当者
+```
 
-## Working with Markdown
+### `columns`
 
-You can author your README using Visual Studio Code. Here are some useful editor keyboard shortcuts:
+各列では次の項目を指定できます。
 
-* Split the editor (`Cmd+\` on macOS or `Ctrl+\` on Windows and Linux).
-* Toggle preview (`Shift+Cmd+V` on macOS or `Shift+Ctrl+V` on Windows and Linux).
-* Press `Ctrl+Space` (Windows, Linux, macOS) to see a list of Markdown snippets.
+| フィールド | 説明 |
+| :--- | :--- |
+| `key` | 行データ内のキー |
+| `label` | テーブルヘッダーに表示する名前 |
+| `width` | 初期列幅（px） |
+| `type` | `string`、`multiline`、`select` のいずれか |
+| `options` | `select` で表示する選択肢の配列 |
+| `options_strict` | `true` の場合、選択肢にない値をエラーにする |
+| `required` | `true` の場合、空値をエラーにする |
+| `pattern` | JavaScript の正規表現として評価する文字列 |
+| `pattern_error` | `pattern` 不一致時のエラーメッセージ |
+| `align` | Markdown の区切り行の配置。`left`、`center`、`right` |
 
-## For more information
+`pattern` は `string` 専用ではなく、値が空でないすべての列に適用されます。`select` では `options_strict` のチェック後に適用されます。値全体を検証する場合は `^` と `$` を付けてください。
 
-* [Visual Studio Code's Markdown Support](http://code.visualstudio.com/docs/languages/markdown)
-* [Markdown Syntax Reference](https://help.github.com/articles/markdown-basics/)
+```yaml
+columns:
+	- key: status
+		label: ステータス
+		type: select
+		options: [未着手, 対応中, 完了]
+		options_strict: true
+		required: true
+		align: center
 
-**Enjoy!**
+	- key: item_id
+		label: 項目ID
+		type: string
+		pattern: "^[A-Z]{2}-[0-9]{3}$"
+		pattern_error: "AA-001 の形式で入力してください"
+		align: left
+
+	- key: description
+		label: 説明
+		type: multiline
+```
+
+完全なサンプルは [schemas/sample-all.schema.yaml](schemas/sample-all.schema.yaml) を参照してください。既存のサンプルとして [schemas/api-param.schema.yaml](schemas/api-param.schema.yaml) と [schemas/screen-item.schema.yaml](schemas/screen-item.schema.yaml) も含まれています。
+
+### `subtables`
+
+サブテーブルを定義すると、メインテーブルとは別の配列を編集できます。`data_key` が spec YAML のトップレベル配列名になります。
+
+```yaml
+subtables:
+	- data_key: choices
+		title: 選択肢一覧
+		columns:
+			- key: value
+				label: 値
+				type: string
+			- key: label
+				label: 表示名
+				type: string
+```
+
+対応するデータは次のように記述します。
+
+```yaml
+schema: example
+items: []
+choices:
+	- value: A
+		label: 選択肢A
+```
+
+## Markdown の生成
+
+Markdown は、spec YAML を保存したときだけ生成されます。`Ctrl+S` または「ファイル」から保存すると、次の処理が行われます。
+
+1. spec YAML を読み込む
+2. `schema` に対応するスキーマを検索する
+3. `markdown_template` のプレースホルダーをデータで置換する
+4. spec YAML と同じ場所に `*.spec.md` を書き出す
+
+Markdown は編集用データではなく生成物です。内容を変更する場合は Markdown ではなく spec YAML またはスキーマを編集し、もう一度 spec YAML を保存してください。
+
+### テンプレート記法
+
+| 記法 | 内容 |
+| :--- | :--- |
+| `{{title}}` | スキーマの `title` |
+| `{{key}}` | spec YAML のトップレベル値 |
+| `{{header_row}}` | `columns` のラベルを結合したヘッダー行 |
+| `{{separator_row}}` | `align` に応じた Markdown 区切り行 |
+| `{{#items}} ... {{/items}}` | メインテーブルの行繰り返し |
+| `{{#data_key}} ... {{/data_key}}` | サブテーブルの行繰り返し |
+| `{{data_key_title}}` | サブテーブルの `title` |
+
+セル内の改行は `<br>` に、Markdown の `|` は `\|` に変換されます。
+
+## インストールと開発
+
+### 依存関係のインストール
+
+```bash
+npm install
+```
+
+### コンパイル
+
+```bash
+npm run compile
+```
+
+### Lint とテスト
+
+```bash
+npm run lint
+npm test
+```
+
+### VSIX の作成
+
+```bash
+npx vsce package
+```
+
+生成された `.vsix` は、VS Code の「拡張機能: VSIX からのインストール」からインストールできます。
+
+## ファイル構成
+
+```text
+schemas/                  # プロジェクト固有のスキーマ
+	*.schema.yaml
+src/                      # 拡張機能本体
+media/editor.html         # テーブル UI
+*.spec.yaml               # 編集対象となるデータ YAML
+*.spec.md                 # 保存時に生成される Markdown
+```
+
+## 注意事項
+
+- スキーマ検索対象は `*.schema.yaml` です。スキーマを追加した場合は、ファイルがワークスペース配下にあることを確認してください。
+- `schema` の値と `schema_id` が一致しない場合、指定したスキーマの列定義は使用されません。
+- Markdown は保存時に上書き生成されます。生成物を直接編集すると、次回保存時に内容が置き換わります。

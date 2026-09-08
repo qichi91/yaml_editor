@@ -165,7 +165,7 @@ export async function activate(context: vscode.ExtensionContext) {
           }
 
           const mdContent = MarkdownGenerator.generate(data, schema);
-          const mdPath = document.fileName.replace(/\.spec\.yaml$/, '.spec.md');
+          const mdPath = document.fileName.replace(/\.spec\.ya?ml$/, '.spec.md');
           fs.writeFileSync(mdPath, mdContent, 'utf8');
           log(`Markdown生成完了: ${mdPath}`);
         } catch (err: any) {

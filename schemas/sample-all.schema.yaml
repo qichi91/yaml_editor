@@ -1,0 +1,147 @@
+schema_id: sample-all
+schema_version: "1.0"
+title: 全要素サンプル仕様書
+
+headers:
+  - key: document_id
+    label: ドキュメントID
+    required: true
+  - key: document_name
+    label: ドキュメント名
+    required: true
+  - key: owner
+    label: 担当者
+
+columns:
+  - key: item_id
+    label: 項目ID
+    width: 100
+    type: string
+    required: true
+    pattern: "^[A-Z]{2}-[0-9]{3}$"
+    pattern_error: "AA-001 の形式で入力してください"
+    align: left
+
+  - key: name
+    label: 項目名
+    width: 160
+    type: string
+    required: true
+    align: left
+
+  - key: input_type
+    label: 入力形式
+    width: 140
+    type: select
+    options:
+      - string
+      - multiline
+      - select
+    options_strict: true
+    required: true
+    align: center
+
+  - key: data_type
+    label: データ型
+    width: 140
+    type: select
+    options:
+      - uint8_t
+      - uint16_t
+      - uint32_t
+      - uint64_t
+      - int8_t
+      - int16_t
+      - int32_t
+      - int64_t
+      - float
+      - double
+      - char
+      - std::string
+    options_strict: true
+    align: center
+
+  - key: status
+    label: ステータス
+    width: 120
+    type: select
+    options:
+      - 未着手
+      - 対応中
+      - 完了
+      - 保留
+    options_strict: true
+    required: true
+    align: center
+
+  - key: description
+    label: 説明
+    width: 240
+    type: multiline
+    align: left
+
+  - key: example
+    label: 入力例
+    width: 180
+    type: multiline
+    align: left
+
+  - key: order
+    label: 表示順
+    width: 80
+    type: string
+    pattern: "^[0-9]+$"
+    pattern_error: "半角数字で入力してください"
+    align: right
+
+subtables:
+  - data_key: choices
+    title: 選択肢一覧
+    columns:
+      - key: value
+        label: 値
+        width: 140
+        type: string
+        required: true
+        align: left
+      - key: label
+        label: 表示名
+        width: 160
+        type: string
+        required: true
+        align: left
+      - key: description
+        label: 説明
+        width: 240
+        type: multiline
+        align: left
+      - key: enabled
+        label: 有効
+        width: 80
+        type: select
+        options:
+          - "○"
+          - "－"
+        options_strict: true
+        align: center
+
+markdown_template: |
+  # {{title}}
+
+  - ドキュメントID: {{document_id}}
+  - ドキュメント名: {{document_name}}
+  - 担当者: {{owner}}
+
+  | {{header_row}} |
+  | {{separator_row}} |
+  {{#items}}
+  | {{item_id}} | {{name}} | {{input_type}} | {{data_type}} | {{status}} | {{description}} | {{example}} | {{order}} |
+  {{/items}}
+
+  ## {{choices_title}}
+
+  | 値 | 表示名 | 説明 | 有効 |
+  | :--- | :--- | :--- | :---: |
+  {{#choices}}
+  | {{value}} | {{label}} | {{description}} | {{enabled}} |
+  {{/choices}}
