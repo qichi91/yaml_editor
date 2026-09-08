@@ -186,6 +186,22 @@ Markdown は、spec YAML を保存したときだけ生成されます。`Ctrl+S
 
 Markdown は編集用データではなく生成物です。内容を変更する場合は Markdown ではなく spec YAML またはスキーマを編集し、もう一度 spec YAML を保存してください。
 
+### CI での整合性チェック
+
+リポジトリ上のすべての spec YAML を対象に Markdown を再生成し、コミット済みの `*.spec.md` と完全一致することを検証できます。検証では Markdown ファイルを書き換えません。一致しない場合や Markdown が存在しない場合は終了コード `1` で終了するため、CI のマージチェックに利用できます。
+
+```bash
+npm run check:markdown
+```
+
+Markdown を意図的に更新する場合は、YAML またはスキーマを変更した後に次のコマンドを実行し、生成された Markdown の差分をコミットします。
+
+```bash
+npm run generate:markdown
+```
+
+`check:markdown` は内部で TypeScript をコンパイルした後、ワークスペース配下の `*.spec.yaml` / `*.spec.yml` を走査します。`node_modules`、`.git`、`.vscode-test` は走査対象外です。
+
 ### テンプレート記法
 
 | 記法 | 内容 |

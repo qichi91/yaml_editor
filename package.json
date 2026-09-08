@@ -40,6 +40,8 @@
     "watch": "tsc -watch -p ./",
     "pretest": "npm run compile && npm run lint",
     "lint": "eslint src",
+    "generate:markdown": "npm run compile --silent && node out/markdownCli.js --write",
+    "check:markdown": "sh scripts/check-markdown.sh",
     "test": "vscode-test"
   },
   "dependencies": {
