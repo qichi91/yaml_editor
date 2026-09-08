@@ -1,0 +1,47 @@
+schema: sample-all
+document_id: SPEC-001
+document_name: 全要素サンプル仕様書
+owner: 開発チーム
+items:
+  - item_id: AA-001
+    name: ユーザーID
+    input_type: string
+    data_type: uint64_t
+    status: 完了
+    description: ユーザーを一意に識別するID。
+    example: "100001"
+    order: "1"
+  - item_id: AA-002
+    name: ユーザー種別
+    input_type: select
+    data_type: std::string
+    status: 対応中
+    description: |
+      ユーザーの権限区分を選択する。
+      選択肢は choices サブテーブルで管理する。
+    example: administrator
+    order: "2"
+  - item_id: AA-003
+    name: 備考
+    input_type: multiline
+    data_type: std::string
+    status: 未着手
+    description: 複数行の補足説明を入力する。
+    example: |
+      1行目の入力例
+      2行目の入力例
+    order: "3"
+
+choices:
+  - value: administrator
+    label: 管理者
+    description: すべての管理操作を実行できる。
+    enabled: "○"
+  - value: operator
+    label: 運用担当者
+    description: 日常の運用操作を実行できる。
+    enabled: "○"
+  - value: viewer
+    label: 閲覧者
+    description: データを閲覧できるが変更できない。
+    enabled: "－"

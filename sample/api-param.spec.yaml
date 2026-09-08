@@ -1,0 +1,33 @@
+schema: api-param
+items:
+  - name: ユーザーID
+    name_en: user_id
+    type: uint64_t
+    key: "〇"
+    overview: |
+      ユーザーを一意に識別するID。
+      APIリクエストでは必須とする。
+    note: |
+      未登録のユーザーはエラーにする。
+  - name: 表示名
+    name_en: display_name
+    type: std::string
+    key: ""
+    overview: 画面に表示するユーザー名。
+    note: 1文字以上64文字以内。
+  - name: 利用状態
+    name_en: status
+    type: uint8_t
+    key: ""
+    overview: |
+      ユーザーの利用状態を表すコード。
+      1は有効、0は無効。
+    note: 初期値は1。
+
+key_items:
+  - key: user_id
+    overview: ユーザーを一意に識別するキー。
+    note: UUIDから移行予定。
+  - key: status
+    overview: 利用状態を表すキー。
+    note: "0: 無効 / 1: 有効"

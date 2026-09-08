@@ -1,0 +1,36 @@
+schema: screen-item
+screen_id: SCR-001
+screen_name: ユーザー登録
+items:
+  - id: "001"
+    label: ユーザー名
+    type: テキストボックス
+    required: "○"
+    description: |
+      ユーザーがログインに使用する名前を入力する。
+      最大64文字まで入力できる。
+    validation: 必須。前後の空白は除去する。
+  - id: "002"
+    label: メールアドレス
+    type: テキストボックス
+    required: "○"
+    description: アカウントの連絡先メールアドレスを入力する。
+    validation: 必須。メールアドレス形式を検証する。
+  - id: "003"
+    label: 権限
+    type: プルダウン
+    required: "○"
+    description: ユーザーに付与する権限を選択する。
+    validation: 管理者または一般ユーザーのいずれかを選択する。
+  - id: "004"
+    label: メール通知
+    type: チェックボックス
+    required: "－"
+    description: メール通知の受信可否を設定する。
+    validation: 初期状態はチェックなし。
+  - id: "005"
+    label: 登録
+    type: ボタン
+    required: "－"
+    description: 入力内容を保存してユーザーを登録する。
+    validation: 入力エラーがある場合は登録しない。
