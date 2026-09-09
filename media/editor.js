@@ -10,6 +10,83 @@ let selectionEnd = null;
 let activeCell = { row: 0, col: 0 };
 let activeSubtableIndex = null;
 let isEditing = false;
+let undoStack = [];
+let redoStack = [];
+
+function cloneData(data) {
+  return JSON.parse(JSON.stringify(data || { schema: '', items: [] }));
+}
+
+function pushUndoState(snapshot) {
+  const before = cloneData(snapshot);
+  const prev = undoStack[undoStack.length - 1];
+  const shouldPush = !prev
+    || JSON.stringify(prev) !== JSON.stringify(before)
+    || (undoStack.length === 1 && JSON.stringify(prev) === JSON.stringify(before));
+  if (shouldPush) {
+    undoStack.push(before);
+    if (undoStack.length > 200) undoStack.shift();
+    redoStack = [];
+  }
+}
+
+function commitBulkEdit(mutator) {
+  const before = cloneData(currentData);
+  pushUndoState(before);
+  mutator();
+  if (JSON.stringify(before) === JSON.stringify(currentData)) {
+    undoStack.pop();
+    return false;
+  }
+  return true;
+}
+
+function restoreSnapshot(snapshot) {
+  if (!snapshot) return;
+  currentData = cloneData(snapshot);
+  if (!Array.isArray(currentData.items)) currentData.items = [];
+  renderRows();
+  renderSubtables();
+  updateSelectionUI();
+  notifyChange();
+}
+
+function undoHistory() {
+  if (undoStack.length <= 1) return;
+  const prev = undoStack.pop();
+  if (!prev) return;
+  redoStack.push(cloneData(currentData));
+  restoreSnapshot(prev);
+}
+
+function redoHistory() {
+  if (redoStack.length === 0) return;
+  const next = redoStack.pop();
+  if (!next) return;
+  undoStack.push(cloneData(currentData));
+  restoreSnapshot(next);
+}
+
+function buildDirtyData() {
+  const cleanItems = (currentData.items || []).filter(row =>
+    Object.values(row || {}).some(v => v !== null && v !== undefined && v.toString().trim() !== '')
+  );
+  const nextData = { ...currentData, items: cleanItems };
+  (schema.subtables || []).forEach(subtable => {
+    const subtableItems = Array.isArray(currentData[subtable.data_key]) ? currentData[subtable.data_key] : [];
+    nextData[subtable.data_key] = subtableItems.filter(row =>
+      Object.values(row || {}).some(v => v !== null && v !== undefined && v.toString().trim() !== '')
+    );
+  });
+  return nextData;
+}
+
+function saveCurrentData() {
+  vscode.postMessage({
+    type: 'save',
+    data: buildDirtyData()
+  });
+}
 
 function getActiveTable() {
   if (activeSubtableIndex === null) {
@@ -76,6 +153,8 @@ function setupStructure() {
     schemaSelect.appendChild(opt);
   });
   schemaSelect.addEventListener('change', () => {
+    const before = cloneData(currentData);
+    pushUndoState(before);
     currentData.schema = schemaSelect.value;
     notifyChange();
   });
@@ -90,6 +169,8 @@ function setupStructure() {
     input.type = 'text';
     input.value = currentData[h.key] || '';
     input.addEventListener('input', () => {
+      const before = cloneData(currentData);
+      pushUndoState(before);
       currentData[h.key] = input.value;
       notifyChange();
     });
@@ -290,6 +371,8 @@ function startSubtableEditing(subtableIndex, rowIndex, colIndex, cell) {
   const finish = save => {
     if (!editor.isConnected) return;
     if (save) {
+      const before = cloneData(currentData);
+      pushUndoState(before);
       const targetItems = Array.isArray(currentData[subtable.data_key]) ? currentData[subtable.data_key] : [];
       while (rowIndex >= targetItems.length) targetItems.push(createEmptySubtableRow(subtable));
       targetItems[rowIndex][column.key] = editor.value;
@@ -450,6 +533,8 @@ function closeEditor(saveChanges) {
     const newVal = editor.value;
 
     if (saveChanges) {
+      const before = cloneData(currentData);
+      pushUndoState(before);
       while (row >= currentData.items.length) {
         currentData.items.push(createEmptyRow());
       }
@@ -479,6 +564,9 @@ function moveActiveCell(rDelta, cDelta) {
 window.addEventListener('keydown', (e) => {
   if (isEditing || e.isComposing || e.keyCode === 229) return;
 
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); saveCurrentData(); return; }
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); undoHistory(); return; }
+  if ((e.ctrlKey || e.metaKey) && (e.key.toLowerCase() === 'y' || (e.shiftKey && e.key.toLowerCase() === 'z'))) { e.preventDefault(); redoHistory(); return; }
   if ((e.ctrlKey || e.metaKey) && e.key === 'c') { copyRange(); e.preventDefault(); return; }
   if ((e.key === 'Enter' || e.key === 'F2') && activeSubtableIndex === null) { startEditing(activeCell.row, activeCell.col); e.preventDefault(); return; }
   if (e.key === 'ArrowUp')    { moveActiveCell(-1, 0); e.preventDefault(); }
@@ -523,16 +611,33 @@ function copyRange() {
 function clearRange() {
   const { minR, maxR, minC, maxC } = getSelectedBounds();
   const table = getActiveTable();
-  let mod = false;
-  for (let r = minR; r <= maxR; r++) {
-    if (r < table.items.length) {
-      for (let c = minC; c <= maxC; c++) {
-        table.items[r][table.columns[c].key] = '';
-        mod = true;
+  const hadAny = (() => {
+    for (let r = minR; r <= maxR; r++) {
+      if (r < table.items.length) {
+        for (let c = minC; c <= maxC; c++) {
+          if ((table.items[r][table.columns[c].key] ?? '').toString().trim() !== '') {
+            return true;
+          }
+        }
       }
     }
+    return false;
+  })();
+  if (!hadAny) return;
+
+  const mutated = commitBulkEdit(() => {
+    for (let r = minR; r <= maxR; r++) {
+      if (r < table.items.length) {
+        for (let c = minC; c <= maxC; c++) {
+          table.items[r][table.columns[c].key] = '';
+        }
+      }
+    }
+  });
+  if (mutated) {
+    notifyChange();
+    table.render();
   }
-  if (mod) { notifyChange(); table.render(); }
 }
 
 window.addEventListener('paste', (e) => {
@@ -541,24 +646,32 @@ window.addEventListener('paste', (e) => {
   if (!text) return;
   e.preventDefault();
 
+  const table = getActiveTable();
+  const before = cloneData(currentData);
   const grid = parseTSV(text);
   const sRow = activeCell.row;
   const sCol = activeCell.col;
-  const table = getActiveTable();
 
-  grid.forEach((vals, rOffset) => {
-    const tRow = sRow + rOffset;
-    while (tRow >= table.items.length) table.items.push(table.createRow());
-    vals.forEach((v, cOffset) => {
-      const tCol = sCol + cOffset;
-      if (tCol < table.columns.length) {
-        table.items[tRow][table.columns[tCol].key] = v;
-      }
+  const mutated = commitBulkEdit(() => {
+    grid.forEach((vals, rOffset) => {
+      const tRow = sRow + rOffset;
+      while (tRow >= table.items.length) table.items.push(table.createRow());
+      vals.forEach((v, cOffset) => {
+        const tCol = sCol + cOffset;
+        if (tCol < table.columns.length) {
+          table.items[tRow][table.columns[tCol].key] = v;
+        }
+      });
     });
   });
 
-  notifyChange();
-  table.render();
+  if (mutated) {
+    notifyChange();
+    table.render();
+  } else if (JSON.stringify(before) !== JSON.stringify(currentData)) {
+    notifyChange();
+    table.render();
+  }
 });
 
 function parseTSV(text) {
@@ -582,16 +695,7 @@ function parseTSV(text) {
 }
 
 function notifyChange() {
-  const cleanItems = currentData.items.filter(row =>
-    Object.values(row).some(v => v !== null && v !== undefined && v.toString().trim() !== '')
-  );
-  const nextData = { ...currentData, items: cleanItems };
-  (schema.subtables || []).forEach(subtable => {
-    const subtableItems = Array.isArray(currentData[subtable.data_key]) ? currentData[subtable.data_key] : [];
-    nextData[subtable.data_key] = subtableItems.filter(row =>
-      Object.values(row).some(v => v !== null && v !== undefined && v.toString().trim() !== '')
-    );
-  });
+  const nextData = buildDirtyData();
   vscode.postMessage({
     type: 'change',
     data: nextData
@@ -604,6 +708,8 @@ window.addEventListener('message', e => {
     currentData = e.data.data || { items: [] };
     availableSchemas = e.data.availableSchemas || [];
     if (!currentData.items) currentData.items = [];
+    undoStack = [cloneData(currentData)];
+    redoStack = [];
     setupStructure();
   }
 });
