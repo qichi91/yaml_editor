@@ -8,7 +8,30 @@ let isMouseDown = false;
 let selectionStart = null;
 let selectionEnd = null;
 let activeCell = { row: 0, col: 0 };
+let activeSubtableIndex = null;
 let isEditing = false;
+
+function getActiveTable() {
+  if (activeSubtableIndex === null) {
+    return {
+      items: currentData.items,
+      columns: schema.columns,
+      createRow: createEmptyRow,
+      render: renderRows
+    };
+  }
+
+  const subtable = schema.subtables[activeSubtableIndex];
+  if (!Array.isArray(currentData[subtable.data_key])) {
+    currentData[subtable.data_key] = [];
+  }
+  return {
+    items: currentData[subtable.data_key],
+    columns: subtable.columns,
+    createRow: () => createEmptySubtableRow(subtable),
+    render: renderSubtables
+  };
+}
 
 function validateCell(colIndex, value) {
   if (!schema || !schema.columns[colIndex]) return { valid: true };
@@ -113,6 +136,7 @@ function renderRows() {
 
     schema.columns.forEach((colConf, colIndex) => {
       const td = document.createElement('td');
+      td.dataset.table = 'main';
       td.dataset.row = rowIndex;
       td.dataset.col = colIndex;
 
@@ -198,6 +222,9 @@ function renderSubtables() {
 
       subtable.columns.forEach((column, colIndex) => {
         const cell = document.createElement('td');
+        cell.dataset.table = String(subtableIndex);
+        cell.dataset.row = rowIndex;
+        cell.dataset.col = colIndex;
         const value = item[column.key] ?? '';
         if (!isLastRow) {
           const validation = validateColumn(column, value);
@@ -211,6 +238,8 @@ function renderSubtables() {
         view.className = 'cell-view';
         view.textContent = value;
         cell.appendChild(view);
+        cell.addEventListener('mousedown', event => onCellMouseDown(event, rowIndex, colIndex, subtableIndex));
+        cell.addEventListener('mouseenter', () => onCellMouseEnter(rowIndex, colIndex, subtableIndex));
         cell.addEventListener('dblclick', () => startSubtableEditing(subtableIndex, rowIndex, colIndex, cell));
         row.appendChild(cell);
       });
@@ -285,18 +314,20 @@ function startSubtableEditing(subtableIndex, rowIndex, colIndex, cell) {
   if (column.type !== 'select') editor.select();
 }
 
-function onCellMouseDown(e, row, col) {
+function onCellMouseDown(e, row, col, subtableIndex = null) {
   if (isEditing) closeEditor(true);
   if (e.button !== 0) return;
   isMouseDown = true;
+  activeSubtableIndex = subtableIndex;
   selectionStart = { row, col };
   selectionEnd = { row, col };
   activeCell = { row, col };
   updateSelectionUI();
 }
 
-function onCellMouseEnter(row, col) {
+function onCellMouseEnter(row, col, subtableIndex = null) {
   if (!isMouseDown || isEditing) return;
+  if (activeSubtableIndex !== subtableIndex) return;
   selectionEnd = { row, col };
   updateSelectionUI();
 }
@@ -317,11 +348,13 @@ function getSelectedBounds() {
 
 function updateSelectionUI() {
   const { minR, maxR, minC, maxC } = getSelectedBounds();
-  document.querySelectorAll('#table-body td[data-row]').forEach(td => {
+  const tableId = activeSubtableIndex === null ? 'main' : String(activeSubtableIndex);
+  document.querySelectorAll('td[data-table][data-row]').forEach(td => {
     const r = parseInt(td.dataset.row, 10);
     const c = parseInt(td.dataset.col, 10);
-    td.classList.toggle('cell-selected', (r >= minR && r <= maxR && c >= minC && c <= maxC));
-    td.classList.toggle('cell-active', (r === activeCell.row && c === activeCell.col));
+    const isActiveTable = td.dataset.table === tableId;
+    td.classList.toggle('cell-selected', isActiveTable && r >= minR && r <= maxR && c >= minC && c <= maxC);
+    td.classList.toggle('cell-active', isActiveTable && r === activeCell.row && c === activeCell.col);
   });
 }
 
@@ -430,8 +463,9 @@ function closeEditor(saveChanges) {
 }
 
 function moveActiveCell(rDelta, cDelta) {
-  const maxR = currentData.items.length;
-  const maxC = schema.columns.length - 1;
+  const table = getActiveTable();
+  const maxR = table.items.length;
+  const maxC = table.columns.length - 1;
   activeCell = {
     row: Math.max(0, Math.min(activeCell.row + rDelta, maxR)),
     col: Math.max(0, Math.min(activeCell.col + cDelta, maxC))
@@ -446,7 +480,7 @@ window.addEventListener('keydown', (e) => {
   if (isEditing || e.isComposing || e.keyCode === 229) return;
 
   if ((e.ctrlKey || e.metaKey) && e.key === 'c') { copyRange(); e.preventDefault(); return; }
-  if (e.key === 'Enter' || e.key === 'F2') { startEditing(activeCell.row, activeCell.col); e.preventDefault(); return; }
+  if ((e.key === 'Enter' || e.key === 'F2') && activeSubtableIndex === null) { startEditing(activeCell.row, activeCell.col); e.preventDefault(); return; }
   if (e.key === 'ArrowUp')    { moveActiveCell(-1, 0); e.preventDefault(); }
   if (e.key === 'ArrowDown')  { moveActiveCell(1, 0);  e.preventDefault(); }
   if (e.key === 'ArrowLeft')  { moveActiveCell(0, -1); e.preventDefault(); }
@@ -457,15 +491,16 @@ window.addEventListener('keydown', (e) => {
 
 function copyRange() {
   const { minR, maxR, minC, maxC } = getSelectedBounds();
+  const table = getActiveTable();
   const plain = [];
   let html = '<table border="1">';
 
   for (let r = minR; r <= maxR; r++) {
-    const item = currentData.items[r] || {};
+    const item = table.items[r] || {};
     const cols = [];
     html += '<tr>';
     for (let c = minC; c <= maxC; c++) {
-      let val = (item[schema.columns[c].key] ?? '').toString();
+      let val = (item[table.columns[c].key] ?? '').toString();
       let pVal = (val.includes('\n') || val.includes('"') || val.includes('\t')) ? `"${val.replace(/"/g, '""')}"` : val;
       cols.push(pVal);
 
@@ -487,16 +522,17 @@ function copyRange() {
 
 function clearRange() {
   const { minR, maxR, minC, maxC } = getSelectedBounds();
+  const table = getActiveTable();
   let mod = false;
   for (let r = minR; r <= maxR; r++) {
-    if (r < currentData.items.length) {
+    if (r < table.items.length) {
       for (let c = minC; c <= maxC; c++) {
-        currentData.items[r][schema.columns[c].key] = '';
+        table.items[r][table.columns[c].key] = '';
         mod = true;
       }
     }
   }
-  if (mod) { notifyChange(); renderRows(); }
+  if (mod) { notifyChange(); table.render(); }
 }
 
 window.addEventListener('paste', (e) => {
@@ -508,20 +544,21 @@ window.addEventListener('paste', (e) => {
   const grid = parseTSV(text);
   const sRow = activeCell.row;
   const sCol = activeCell.col;
+  const table = getActiveTable();
 
   grid.forEach((vals, rOffset) => {
     const tRow = sRow + rOffset;
-    while (tRow >= currentData.items.length) currentData.items.push(createEmptyRow());
+    while (tRow >= table.items.length) table.items.push(table.createRow());
     vals.forEach((v, cOffset) => {
       const tCol = sCol + cOffset;
-      if (tCol < schema.columns.length) {
-        currentData.items[tRow][schema.columns[tCol].key] = v;
+      if (tCol < table.columns.length) {
+        table.items[tRow][table.columns[tCol].key] = v;
       }
     });
   });
 
   notifyChange();
-  renderRows();
+  table.render();
 });
 
 function parseTSV(text) {
