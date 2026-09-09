@@ -4,7 +4,7 @@
   "description": "Schema-driven table editor with clean YAML & Markdown generation",
   "version": "0.0.1",
   "engines": {
-    "vscode": "^1.136.0"
+    "vscode": "^1.103.0"
   },
   "categories": [
     "Other"
@@ -51,7 +51,7 @@
     "@types/js-yaml": "^4.0.9",
     "@types/mocha": "^10.0.10",
     "@types/node": "24.x",
-    "@types/vscode": "^1.136.0",
+    "@types/vscode": "^1.103.0",
     "@vscode/test-cli": "^0.0.15",
     "@vscode/test-electron": "^3.0.0",
     "@vscode/vsce": "^3.9.2",
