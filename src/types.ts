@@ -31,6 +31,8 @@ export interface SubtableConfig {
   data_key: string;
   title: string;
   columns: ColumnConfig[];
+  kind?: 'default' | 'notes';
+  note_ref_key?: string;
 }
 
 export interface SpecData {

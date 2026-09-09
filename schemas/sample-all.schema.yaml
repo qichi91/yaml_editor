@@ -125,6 +125,23 @@ subtables:
         options_strict: true
         align: center
 
+  - data_key: notes
+    kind: notes
+    title: 注釈一覧
+    columns:
+      - key: ref
+        label: No
+        width: 80
+        type: string
+        required: true
+        align: center
+      - key: text
+        label: 注釈内容
+        width: 420
+        type: multiline
+        required: true
+        align: left
+
 markdown_template: |
   # {{title}}
 
@@ -145,3 +162,6 @@ markdown_template: |
   {{#choices}}
   | {{value}} | {{label}} | {{description}} | {{enabled}} |
   {{/choices}}
+
+  ## 注釈
+  {{notes_list}}

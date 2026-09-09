@@ -189,6 +189,64 @@ choices:
 		label: 選択肢A
 ```
 
+### 注釈テーブル
+
+注釈は通常の項目と分離し、専用のサブテーブルで管理するのが便利です。`kind: notes` を付けることで、注釈一覧として扱えます。本文中では `[^1]` のような参照を使い、注釈定義側は `[^1]: ...` の形式で書きます。
+
+```yaml
+subtables:
+  - data_key: notes
+    kind: notes
+    title: 注釈一覧
+    columns:
+      - key: ref
+        label: No
+        type: string
+        required: true
+      - key: text
+        label: 注釈内容
+        type: multiline
+        required: true
+```
+
+対応するデータ例:
+
+```yaml
+schema: example
+items:
+  - item_id: A-01
+    name: サンプル
+    description: ここでは注釈を使う[^1]
+notes:
+  - ref: "1"
+    text: |
+      この項目は、外部システムから取得した値を前提とする。
+      複数行の注釈も保持できる。
+```
+
+Markdown テンプレートでは、注釈一覧を `{{notes_list}}` で展開できます。
+
+```yaml
+markdown_template: |
+  | 項目ID | 名称 | 説明 |
+  | :--- | :--- | :--- |
+  {{#items}}
+  | {{item_id}} | {{name}} | {{description}} |
+  {{/items}}
+
+  ## 注釈
+  {{notes_list}}
+```
+
+`notes_list` は自動的に以下の形式に変換されます。
+
+```md
+[^1]: この項目は、外部システムから取得した値を前提とする。
+[^2]: 複数行の注釈も保持できる。
+```
+
+本文への参照は `[^1]`、注釈定義は `[^1]: ...` のペアで管理し、同じ注釈を複数の項目から参照しやすくします。
+
 ## Markdown の生成
 
 Markdown は、spec YAML を保存したときだけ生成されます。`Ctrl+S` または「ファイル」から保存すると、次の処理が行われます。

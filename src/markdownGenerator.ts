@@ -21,6 +21,15 @@ export class MarkdownGenerator {
       );
     });
 
+    const notesSubtable = (schema.subtables || []).find(subtable => subtable.kind === 'notes' || subtable.data_key === 'notes');
+    const notesRows = notesSubtable ? (Array.isArray(data[notesSubtable.data_key]) ? data[notesSubtable.data_key] : []) : [];
+    const notesList = notesRows.map((row: Record<string, any>, index: number) => {
+      const ref = String(row[notesSubtable?.note_ref_key || 'ref'] ?? index + 1);
+      const text = String(row.text ?? row.note ?? row.description ?? '').replace(/\|/g, '\\|').replace(/\r?\n/g, '<br>');
+      return `[^${ref}]: ${text}`;
+    }).join('\n');
+    tpl = tpl.replace(/\{\{notes_list\}\}/g, notesList);
+
     // ヘッダー共通項目の置換
     for (const [key, value] of Object.entries(data)) {
       if (key !== 'items' && key !== 'schema') {
