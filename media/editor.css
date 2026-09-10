@@ -50,9 +50,16 @@ body {
 table {
   border-collapse: collapse;
   width: 100%;
-  min-width: max-content;
-  table-layout: auto;
   background: var(--bg-color);
+  /* 列幅はJSが grid-template-columns で動的に設定する（1列目固定幅、他はminmaxで最低幅+均等伸縮） */
+  display: grid;
+}
+
+/* thead/tbody/trをボックスとして持たず、子要素のth/tdを直接tableのグリッドアイテムにする */
+table thead,
+table tbody,
+table tr {
+  display: contents;
 }
 
 /* 列幅の合計がwindow幅を超えたとき、列を縮めず横スクロールにするラッパー */
@@ -64,6 +71,7 @@ th,
 td {
   border: 1px solid var(--border-color);
   padding: 0;
+  box-sizing: border-box;
   position: relative;
   vertical-align: top;
 }
@@ -85,25 +93,17 @@ th {
   overflow: hidden;
 }
 
-/* 実データ行の番号セルはpaddingを内側のabsolute要素に譲る */
-.row-num--fixed {
-  padding: 0;
-}
-
-/* absolute配置にすることで、中身の内容量がtable-layout:autoの列幅計算（各セルのmin-contentの最大値）に影響しないようにする */
+/* CSS Gridの固定トラックは内容量に影響されないため、通常のflexで十分 */
 .row-num-inner {
-  position: absolute;
-  inset: 0;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 4px;
-  padding: 6px 4px;
-  overflow: hidden;
-  box-sizing: border-box;
+  min-width: 0;
 }
 
 .row-num-text {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
 }
@@ -201,7 +201,8 @@ textarea.cell-editor {
   resize: none;
 }
 
-.placeholder-row {
+.placeholder-row > td,
+.placeholder-row > th {
   opacity: 0.45;
 }
 

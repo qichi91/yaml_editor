@@ -1,5 +1,6 @@
 const vscode = acquireVsCodeApi();
 
+// ===== 状態管理・Undo/Redo =====
 let schema = null;
 let currentData = { schema: '', items: [] };
 let availableSchemas = [];
@@ -91,6 +92,7 @@ function redoHistory() {
   restoreSnapshot(next);
 }
 
+// ===== データ整形・空行判定 =====
 // 値が空、もしくは列の初期値と同じ場合は「未入力」とみなす
 function isBlankValue(value, defaultValue) {
   if (value === null || value === undefined) return true;
@@ -143,6 +145,7 @@ function getActiveTable() {
   };
 }
 
+// ===== バリデーション =====
 function validateCell(colIndex, value) {
   if (!schema || !schema.columns[colIndex]) return { valid: true };
   const conf = schema.columns[colIndex];
@@ -168,6 +171,7 @@ function validateCell(colIndex, value) {
   return { valid: true };
 }
 
+// ===== 描画：メインテーブル・サブテーブルの構築 =====
 function setupStructure() {
   if (!schema) return;
 
@@ -217,18 +221,18 @@ function setupStructure() {
   const tr = document.createElement('tr');
   const thNum = document.createElement('th');
   thNum.className = 'row-num';
-  const mainRowNumWidth = schema.row_number_width || DEFAULT_ROW_NUM_WIDTH;
-  pinWidth(thNum, mainRowNumWidth);
   thNum.textContent = '#';
   tr.appendChild(thNum);
 
   schema.columns.forEach(col => {
     const th = document.createElement('th');
-    if (col.width) th.style.width = col.width + 'px';
     th.textContent = col.label;
     tr.appendChild(th);
   });
   thead.appendChild(tr);
+
+  const mainRowNumWidth = schema.row_number_width || DEFAULT_ROW_NUM_WIDTH;
+  document.getElementById('spec-table').style.gridTemplateColumns = computeGridTemplateColumns(mainRowNumWidth, schema.columns);
 
   renderRows();
   renderSubtables();
@@ -287,24 +291,22 @@ function resolveIndentTargetRange(rowIndex, subtableIndex) {
 
 // 行番号列の幅をスキーマで指定しなかった場合の既定値
 const DEFAULT_ROW_NUM_WIDTH = 64;
+// データ列にwidthが未指定の場合の最低幅（CSS Gridのminmax()に使う）
+const DEFAULT_COLUMN_MIN_WIDTH = 100;
 
-// min/maxも同値に固定することで、他の列が内容に応じて伸縮しても行番号列だけは幅を保つ
-function pinWidth(el, px) {
-  el.style.width = px + 'px';
-  el.style.minWidth = px + 'px';
-  el.style.maxWidth = px + 'px';
+// 1列目は固定幅、2列目以降はminmax(最低幅, 1fr)で最低幅を守りつつ均等に伸縮させる
+function computeGridTemplateColumns(rowNumWidth, columns) {
+  const rest = columns.map(col => `minmax(${col.width || DEFAULT_COLUMN_MIN_WIDTH}px, 1fr)`).join(' ');
+  return `${rowNumWidth}px ${rest}`;
 }
 
-function buildRowNumCell(rowIndex, isLastRow, entry, subtableIndex, width) {
+function buildRowNumCell(rowIndex, isLastRow, entry, subtableIndex) {
   const tdNum = document.createElement('td');
   tdNum.className = 'row-num';
-  pinWidth(tdNum, width);
   if (isLastRow) {
     tdNum.textContent = '*';
     return tdNum;
   }
-  // 中身をabsolute配置するtd自体はpaddingを持たせず、内側の.row-num-innerに任せる
-  tdNum.classList.add('row-num--fixed');
 
   const numSpan = document.createElement('span');
   numSpan.className = 'row-num-text';
@@ -339,7 +341,7 @@ function buildRowNumCell(rowIndex, isLastRow, entry, subtableIndex, width) {
   btnGroup.appendChild(outdentBtn);
   btnGroup.appendChild(indentBtn);
 
-  // tdをflex化するとtable-layoutの列幅計算が崩れるため、内側のdivでflexレイアウトする
+  // 番号を左、ボタン群を右に配置する内側ラッパー
   const inner = document.createElement('div');
   inner.className = 'row-num-inner';
   inner.appendChild(numSpan);
@@ -354,14 +356,13 @@ function renderRows() {
 
   const displayItems = [...(currentData.items || []), createEmptyRow()];
   const numbers = computeHierarchicalNumbers(currentData.items || []);
-  const rowNumWidth = schema.row_number_width || DEFAULT_ROW_NUM_WIDTH;
 
   displayItems.forEach((item, rowIndex) => {
     const isLastRow = (rowIndex === displayItems.length - 1);
     const tr = document.createElement('tr');
     if (isLastRow) tr.className = 'placeholder-row';
 
-    tr.appendChild(buildRowNumCell(rowIndex, isLastRow, numbers[rowIndex], null, rowNumWidth));
+    tr.appendChild(buildRowNumCell(rowIndex, isLastRow, numbers[rowIndex], null));
 
     schema.columns.forEach((colConf, colIndex) => {
       const td = document.createElement('td');
@@ -427,17 +428,16 @@ function renderSubtables() {
     const rowNumberHeader = document.createElement('th');
     rowNumberHeader.className = 'row-num';
     const subtableRowNumWidth = subtable.row_number_width || schema.row_number_width || DEFAULT_ROW_NUM_WIDTH;
-    pinWidth(rowNumberHeader, subtableRowNumWidth);
     rowNumberHeader.textContent = '#';
     headRow.appendChild(rowNumberHeader);
     subtable.columns.forEach(column => {
       const th = document.createElement('th');
-      if (column.width) th.style.width = column.width + 'px';
       th.textContent = column.label;
       headRow.appendChild(th);
     });
     thead.appendChild(headRow);
     table.appendChild(thead);
+    table.style.gridTemplateColumns = computeGridTemplateColumns(subtableRowNumWidth, subtable.columns);
 
     const tbody = document.createElement('tbody');
     const items = Array.isArray(currentData[subtable.data_key]) ? currentData[subtable.data_key] : [];
@@ -447,7 +447,7 @@ function renderSubtables() {
       const row = document.createElement('tr');
       if (isLastRow) row.className = 'placeholder-row';
 
-      row.appendChild(buildRowNumCell(rowIndex, isLastRow, numbers[rowIndex], subtableIndex, subtableRowNumWidth));
+      row.appendChild(buildRowNumCell(rowIndex, isLastRow, numbers[rowIndex], subtableIndex));
 
       subtable.columns.forEach((column, colIndex) => {
         const cell = document.createElement('td');
@@ -496,6 +496,7 @@ function validateColumn(column, value) {
   return { valid: true };
 }
 
+// ===== セル編集・選択操作 =====
 function startSubtableEditing(subtableIndex, rowIndex, colIndex, cell, initialValue) {
   if (isEditing && closeActiveEditor) closeActiveEditor(true);
   isEditing = true;
@@ -761,7 +762,7 @@ function startEditingAtActiveCell(initialValue) {
   if (cell) startSubtableEditing(activeSubtableIndex, activeCell.row, activeCell.col, cell, initialValue);
 }
 
-// キーボード制御（セル移動と確定操作に限定し、IME誤爆を防ぐ）
+// ===== キーボード制御（セル移動と確定操作に限定し、IME誤爆を防ぐ） =====
 keyCapture.addEventListener('keydown', (e) => {
   if (e.isComposing || e.keyCode === 229) return;
 
@@ -796,6 +797,7 @@ keyCapture.addEventListener('input', (e) => {
 });
 keyCapture.addEventListener('compositionend', () => finalizeKeyCapture());
 
+// ===== Excel連携（コピー・貼り付け） =====
 function copyRange() {
   const { minR, maxR, minC, maxC } = getSelectedBounds();
   const table = getActiveTable();
@@ -913,6 +915,7 @@ function parseTSV(text) {
   return rows.filter(r => r.length > 1 || (r[0] && r[0].trim() !== ''));
 }
 
+// ===== 拡張機能本体との通信・起動 =====
 function notifyChange() {
   const nextData = buildDirtyData();
   vscode.postMessage({
