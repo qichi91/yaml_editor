@@ -61,23 +61,36 @@ export async function activate(context: vscode.ExtensionContext) {
           if (text.trim().length === 0) {
             return { schema: '', items: [] };
           }
-          return yaml.load(text) as SpecData;
+          const data = yaml.load(text) as SpecData;
+          return data || { schema: '', items: [] };
         }
 
-        // Webviewへデータ・スキーマ送信
-        function syncToWebview() {
+        // schema未指定の場合、利用可能なスキーマの先頭を仮の既定値として補う
+        function resolveSchemaId(schemaId: string): string {
+          if (schemaId) return schemaId;
+          const [firstAvailable] = schemaManager.getAllSchemaIds();
+          return firstAvailable || '';
+        }
+
+        // Webviewへ最後に送信したschema（ディスク上のデータは保存まで更新されないため、変更検知の基準として保持）
+        let lastSyncedSchemaId = '';
+
+        // Webviewへデータ・スキーマ送信（data未指定時はドキュメントから再取得）
+        function syncToWebview(data?: SpecData) {
           try {
-            const data = parseDocument();
-            const registeredSchema = schemaManager.getSchema(data.schema);
+            const targetData = data || parseDocument();
+            const resolvedSchemaId = resolveSchemaId(targetData.schema);
+            const registeredSchema = schemaManager.getSchema(resolvedSchemaId);
             const schema = registeredSchema || schemaManager.getFallbackSchema();
             const availableSchemas = schemaManager.getAllSchemaIds();
-            log(`Webview初期化: schema=${data.schema || '(未指定)'}, `
+            log(`Webview初期化: schema=${targetData.schema || '(未指定)'}, `
               + `解決結果=${registeredSchema?.schema_id || 'fallback'}, `
               + `利用可能=${availableSchemas.join(', ') || '(なし)'}`);
+            lastSyncedSchemaId = resolvedSchemaId;
             webviewPanel.webview.postMessage({
               type: 'init',
               schema,
-              data,
+              data: { ...targetData, schema: resolvedSchemaId },
               availableSchemas
             });
           } catch (err: any) {
@@ -97,7 +110,7 @@ export async function activate(context: vscode.ExtensionContext) {
           if (message.type === 'change') {
             const currentData = parseDocument();
             const incomingData = message.data as SpecData;
-            const schemaChanged = currentData.schema !== incomingData.schema;
+            const schemaChanged = lastSyncedSchemaId !== incomingData.schema;
 
             const mergedItems = incomingData.items.map((newItem, idx) => {
               const oldItem = currentData.items?.[idx] || {};
@@ -124,15 +137,15 @@ export async function activate(context: vscode.ExtensionContext) {
             }
 
             if (schemaChanged) {
-              log(`スキーマ変更、Webviewを再同期: ${currentData.schema || '(未指定)'} -> ${incomingData.schema || '(未指定)'}`);
-              syncToWebview();
+              log(`スキーマ変更、Webviewを再同期: ${lastSyncedSchemaId || '(未指定)'} -> ${incomingData.schema || '(未指定)'}`);
+              syncToWebview(finalData);
             }
             return;
           }
           if (message.type === 'save') {
             const incomingData = message.data as SpecData;
             const currentData = parseDocument();
-            const schemaChanged = currentData.schema !== incomingData.schema;
+            const schemaChanged = lastSyncedSchemaId !== incomingData.schema;
             const mergedItems = incomingData.items.map((newItem, idx) => {
               const oldItem = currentData.items?.[idx] || {};
               return { ...oldItem, ...newItem };
@@ -169,7 +182,7 @@ export async function activate(context: vscode.ExtensionContext) {
             await vscode.workspace.applyEdit(edit);
             log(`YAML保存適用: ${document.uri.fsPath}, items=${finalData.items.length}`);
             if (schemaChanged) {
-              log(`スキーマ変更、Webviewを再同期: ${currentData.schema || '(未指定)'} -> ${incomingData.schema || '(未指定)'}`);
+              log(`スキーマ変更、Webviewを再同期: ${lastSyncedSchemaId || '(未指定)'} -> ${incomingData.schema || '(未指定)'}`);
               syncToWebview();
             }
           }
