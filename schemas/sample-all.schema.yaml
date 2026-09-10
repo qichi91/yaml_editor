@@ -149,10 +149,10 @@ markdown_template: |
   - ドキュメント名: {{document_name}}
   - 担当者: {{owner}}
 
-  | {{header_row}} |
-  | {{separator_row}} |
+  | No. | {{header_row}} |
+  | :---: | {{separator_row}} |
   {{#items}}
-  | {{item_id}} | {{name}} | {{input_type}} | {{data_type}} | {{status}} | {{description}} | {{example}} | {{order}} |
+  | {{row_number}} | {{item_id}} | {{name}} | {{input_type}} | {{data_type}} | {{status}} | {{description}} | {{example}} | {{order}} |
   {{/items}}
 
   ## {{choices_title}}

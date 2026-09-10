@@ -19,7 +19,7 @@ export function sanitizeForSave<T extends Record<string, any>>(
     return items.filter(item => {
       if (!item || typeof item !== 'object') return false;
       return Object.entries(item as Record<string, unknown>).some(([key, value]) =>
-        !isBlankValue(value, defaultsByKey.get(key))
+        key !== '_indent' && !isBlankValue(value, defaultsByKey.get(key))
       );
     });
   };

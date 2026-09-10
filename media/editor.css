@@ -50,8 +50,14 @@ body {
 table {
   border-collapse: collapse;
   width: 100%;
-  table-layout: fixed;
+  min-width: max-content;
+  table-layout: auto;
   background: var(--bg-color);
+}
+
+/* 列幅の合計がwindow幅を超えたとき、列を縮めず横スクロールにするラッパー */
+.table-scroll {
+  overflow-x: auto;
 }
 
 th,
@@ -70,12 +76,62 @@ th {
 }
 
 .row-num {
-  text-align: center;
+  text-align: left;
   padding: 6px 4px;
   color: #888;
   font-size: 11px;
-  width: 32px;
   background: var(--header-bg);
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+/* 実データ行の番号セルはpaddingを内側のabsolute要素に譲る */
+.row-num--fixed {
+  padding: 0;
+}
+
+/* absolute配置にすることで、中身の内容量がtable-layout:autoの列幅計算（各セルのmin-contentの最大値）に影響しないようにする */
+.row-num-inner {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  padding: 6px 4px;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+.row-num-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.row-indent-btns {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 2px;
+}
+
+.row-indent-btn {
+  border: 1px solid var(--border-color);
+  background: transparent;
+  color: inherit;
+  font-size: 10px;
+  line-height: 1;
+  padding: 1px 3px;
+  border-radius: 2px;
+  cursor: pointer;
+}
+
+.row-indent-btn:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+.row-indent-btn:hover:not(:disabled) {
+  background: var(--select-bg);
 }
 
 .cell-view {

@@ -105,6 +105,7 @@ markdown_template: |
 | `columns` | ○ | メインテーブルの列定義 |
 | `subtables` | - | メインテーブル以外のテーブル定義 |
 | `markdown_template` | ○ | Markdown 出力テンプレート |
+| `row_number_width` | - | 行番号列の幅（px）。階層番号や切替ボタンが収まる幅を指定できる（未指定時は既定値） |
 
 ### `headers`
 
@@ -165,7 +166,7 @@ columns:
 
 ### `subtables`
 
-サブテーブルを定義すると、メインテーブルとは別の配列を編集できます。`data_key` が spec YAML のトップレベル配列名になります。
+サブテーブルを定義すると、メインテーブルとは別の配列を編集できます。`data_key` が spec YAML のトップレベル配列名になります。行番号列の幅は `row_number_width` でサブテーブルごとに指定できます。
 
 ```yaml
 subtables:

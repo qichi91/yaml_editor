@@ -1,5 +1,18 @@
 import { TableSchema, SpecData } from './types';
 
+// 「3」「3-1」のような階層番号をitemの_indent（0=親, 1=子, ...）から算出する（editor.jsと同じロジック）
+function computeHierarchicalNumbers(items: Array<Record<string, any>>): string[] {
+  const counters: number[] = [];
+  return items.map(item => {
+    const raw = Math.max(0, Number(item && item._indent) || 0);
+    const level = Math.min(raw, counters.length);
+    while (counters.length <= level) counters.push(0);
+    counters[level] += 1;
+    counters.length = level + 1;
+    return counters.join('-');
+  });
+}
+
 export class MarkdownGenerator {
   public static generate(data: SpecData, schema: TableSchema): string {
     const cols = schema.columns || [];
@@ -46,9 +59,10 @@ export class MarkdownGenerator {
       const columns = dataKey === 'items'
         ? cols
         : (schema.subtables?.find(subtable => subtable.data_key === dataKey)?.columns || []);
+      const rowNumbers = computeHierarchicalNumbers(rows);
       return rows.map((item, rowIndex) => {
         let row = rowTemplate.trim();
-        row = row.replace(/\{\{row_number\}\}/g, String(rowIndex + 1));
+        row = row.replace(/\{\{row_number\}\}/g, rowNumbers[rowIndex]);
         columns.forEach(column => {
           let value = (item[column.key] ?? '').toString();
           value = value.replace(/\|/g, '\\|').replace(/\r?\n/g, '<br>');

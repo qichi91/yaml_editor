@@ -26,6 +26,7 @@ export interface TableSchema {
   columns: ColumnConfig[];
   subtables?: SubtableConfig[];
   markdown_template: string;
+  row_number_width?: number;
 }
 
 export interface SubtableConfig {
@@ -34,6 +35,7 @@ export interface SubtableConfig {
   columns: ColumnConfig[];
   kind?: 'default' | 'notes';
   note_ref_key?: string;
+  row_number_width?: number;
 }
 
 export interface SpecData {

@@ -101,7 +101,7 @@ function isBlankValue(value, defaultValue) {
 
 function isRowBlank(row, columns) {
   const defaultsByKey = new Map((columns || []).map(col => [col.key, col.default]));
-  return Object.entries(row || {}).every(([key, value]) => isBlankValue(value, defaultsByKey.get(key)));
+  return Object.entries(row || {}).every(([key, value]) => key === '_indent' || isBlankValue(value, defaultsByKey.get(key)));
 }
 
 function buildDirtyData() {
@@ -216,7 +216,9 @@ function setupStructure() {
   thead.innerHTML = '';
   const tr = document.createElement('tr');
   const thNum = document.createElement('th');
-  thNum.style.width = '32px';
+  thNum.className = 'row-num';
+  const mainRowNumWidth = schema.row_number_width || DEFAULT_ROW_NUM_WIDTH;
+  pinWidth(thNum, mainRowNumWidth);
   thNum.textContent = '#';
   tr.appendChild(thNum);
 
@@ -232,21 +234,134 @@ function setupStructure() {
   renderSubtables();
 }
 
+// 「3」「3-1」のような階層番号を_indent（0=親, 1=子, ...）から都度計算する。保存はせず表示のみに使うため、
+// 手入力による連番崩れは起こらない
+function computeHierarchicalNumbers(items) {
+  const counters = [];
+  return (items || []).map(item => {
+    const raw = Math.max(0, Number(item && item._indent) || 0);
+    const level = Math.min(raw, counters.length);
+    while (counters.length <= level) counters.push(0);
+    counters[level] += 1;
+    counters.length = level + 1;
+    return { label: counters.join('-'), level };
+  });
+}
+
+// minRow〜maxRowの各行を子/親レベルへ移動。行ごとに直前行の階層を超えて飛び級しないようクランプして_indentへ保存する
+function adjustRowIndentRange(minRow, maxRow, delta, subtableIndex = null) {
+  const isSubtable = subtableIndex !== null;
+  const subtable = isSubtable ? schema.subtables[subtableIndex] : null;
+  const items = isSubtable ? currentData[subtable.data_key] : currentData.items;
+  if (!Array.isArray(items)) return;
+  const clampedMax = Math.min(maxRow, items.length - 1);
+  if (minRow > clampedMax) return;
+
+  const before = cloneData(currentData);
+  pushUndoState(before);
+
+  for (let r = minRow; r <= clampedMax; r++) {
+    const levels = computeHierarchicalNumbers(items).map(entry => entry.level);
+    const maxAllowed = r === 0 ? 0 : levels[r - 1] + 1;
+    items[r]._indent = Math.max(0, Math.min(levels[r] + delta, maxAllowed));
+  }
+
+  if (JSON.stringify(before) === JSON.stringify(currentData)) {
+    undoStack.pop();
+    return;
+  }
+  notifyChange();
+  (isSubtable ? renderSubtables : renderRows)();
+  focusKeyCapture();
+}
+
+// クリックされた行が現在の複数行選択に含まれていれば、選択範囲全体を操作対象にする
+function resolveIndentTargetRange(rowIndex, subtableIndex) {
+  if (activeSubtableIndex === subtableIndex && selectionStart && selectionEnd) {
+    const minR = Math.min(selectionStart.row, selectionEnd.row);
+    const maxR = Math.max(selectionStart.row, selectionEnd.row);
+    if (rowIndex >= minR && rowIndex <= maxR) return { minR, maxR };
+  }
+  return { minR: rowIndex, maxR: rowIndex };
+}
+
+// 行番号列の幅をスキーマで指定しなかった場合の既定値
+const DEFAULT_ROW_NUM_WIDTH = 64;
+
+// min/maxも同値に固定することで、他の列が内容に応じて伸縮しても行番号列だけは幅を保つ
+function pinWidth(el, px) {
+  el.style.width = px + 'px';
+  el.style.minWidth = px + 'px';
+  el.style.maxWidth = px + 'px';
+}
+
+function buildRowNumCell(rowIndex, isLastRow, entry, subtableIndex, width) {
+  const tdNum = document.createElement('td');
+  tdNum.className = 'row-num';
+  pinWidth(tdNum, width);
+  if (isLastRow) {
+    tdNum.textContent = '*';
+    return tdNum;
+  }
+  // 中身をabsolute配置するtd自体はpaddingを持たせず、内側の.row-num-innerに任せる
+  tdNum.classList.add('row-num--fixed');
+
+  const numSpan = document.createElement('span');
+  numSpan.className = 'row-num-text';
+  numSpan.textContent = entry.label;
+
+  const outdentBtn = document.createElement('button');
+  outdentBtn.type = 'button';
+  outdentBtn.className = 'row-indent-btn';
+  outdentBtn.textContent = '\u2190';
+  outdentBtn.title = '\u89aa\u30ec\u30d9\u30eb\u306b\u623b\u3059\uff08\u9078\u629e\u4e2d\u306e\u5168\u884c\u306b\u9069\u7528\uff09';
+  outdentBtn.disabled = entry.level === 0;
+  outdentBtn.addEventListener('mousedown', e => e.stopPropagation());
+  outdentBtn.addEventListener('click', () => {
+    const { minR, maxR } = resolveIndentTargetRange(rowIndex, subtableIndex);
+    adjustRowIndentRange(minR, maxR, -1, subtableIndex);
+  });
+
+  const indentBtn = document.createElement('button');
+  indentBtn.type = 'button';
+  indentBtn.className = 'row-indent-btn';
+  indentBtn.textContent = '\u2192';
+  indentBtn.title = '\u5b50\u30ec\u30d9\u30eb\u306b\u3059\u308b\uff08\u9078\u629e\u4e2d\u306e\u5168\u884c\u306b\u9069\u7528\uff09';
+  indentBtn.addEventListener('mousedown', e => e.stopPropagation());
+  indentBtn.addEventListener('click', () => {
+    const { minR, maxR } = resolveIndentTargetRange(rowIndex, subtableIndex);
+    adjustRowIndentRange(minR, maxR, 1, subtableIndex);
+  });
+
+  // ボタンをグループ化して右固定することで、番号の桁数が変わっても連続クリックできる位置に保つ
+  const btnGroup = document.createElement('span');
+  btnGroup.className = 'row-indent-btns';
+  btnGroup.appendChild(outdentBtn);
+  btnGroup.appendChild(indentBtn);
+
+  // tdをflex化するとtable-layoutの列幅計算が崩れるため、内側のdivでflexレイアウトする
+  const inner = document.createElement('div');
+  inner.className = 'row-num-inner';
+  inner.appendChild(numSpan);
+  inner.appendChild(btnGroup);
+  tdNum.appendChild(inner);
+  return tdNum;
+}
+
 function renderRows() {
   const tbody = document.getElementById('table-body');
   tbody.innerHTML = '';
 
   const displayItems = [...(currentData.items || []), createEmptyRow()];
+  const numbers = computeHierarchicalNumbers(currentData.items || []);
+  const rowNumWidth = schema.row_number_width || DEFAULT_ROW_NUM_WIDTH;
 
   displayItems.forEach((item, rowIndex) => {
     const isLastRow = (rowIndex === displayItems.length - 1);
     const tr = document.createElement('tr');
     if (isLastRow) tr.className = 'placeholder-row';
 
-    const tdNum = document.createElement('td');
-    tdNum.className = 'row-num';
-    tdNum.textContent = isLastRow ? '*' : (rowIndex + 1);
-    tr.appendChild(tdNum);
+    tr.appendChild(buildRowNumCell(rowIndex, isLastRow, numbers[rowIndex], null, rowNumWidth));
 
     schema.columns.forEach((colConf, colIndex) => {
       const td = document.createElement('td');
@@ -283,13 +398,13 @@ function renderRows() {
 }
 
 function createEmptyRow() {
-  const row = {};
+  const row = { _indent: 0 };
   if (schema) schema.columns.forEach(c => row[c.key] = c.default ?? '');
   return row;
 }
 
 function createEmptySubtableRow(subtable) {
-  const row = {};
+  const row = { _indent: 0 };
   subtable.columns.forEach(column => row[column.key] = column.default ?? '');
   return row;
 }
@@ -311,6 +426,8 @@ function renderSubtables() {
     const headRow = document.createElement('tr');
     const rowNumberHeader = document.createElement('th');
     rowNumberHeader.className = 'row-num';
+    const subtableRowNumWidth = subtable.row_number_width || schema.row_number_width || DEFAULT_ROW_NUM_WIDTH;
+    pinWidth(rowNumberHeader, subtableRowNumWidth);
     rowNumberHeader.textContent = '#';
     headRow.appendChild(rowNumberHeader);
     subtable.columns.forEach(column => {
@@ -324,15 +441,13 @@ function renderSubtables() {
 
     const tbody = document.createElement('tbody');
     const items = Array.isArray(currentData[subtable.data_key]) ? currentData[subtable.data_key] : [];
+    const numbers = computeHierarchicalNumbers(items);
     [...items, createEmptySubtableRow(subtable)].forEach((item, rowIndex, rows) => {
       const isLastRow = rowIndex === rows.length - 1;
       const row = document.createElement('tr');
       if (isLastRow) row.className = 'placeholder-row';
 
-      const rowNumber = document.createElement('td');
-      rowNumber.className = 'row-num';
-      rowNumber.textContent = isLastRow ? '*' : String(rowIndex + 1);
-      row.appendChild(rowNumber);
+      row.appendChild(buildRowNumCell(rowIndex, isLastRow, numbers[rowIndex], subtableIndex, subtableRowNumWidth));
 
       subtable.columns.forEach((column, colIndex) => {
         const cell = document.createElement('td');
@@ -360,7 +475,10 @@ function renderSubtables() {
       tbody.appendChild(row);
     });
     table.appendChild(tbody);
-    section.appendChild(table);
+    const scrollWrap = document.createElement('div');
+    scrollWrap.className = 'table-scroll';
+    scrollWrap.appendChild(table);
+    section.appendChild(scrollWrap);
     container.appendChild(section);
   });
 }
