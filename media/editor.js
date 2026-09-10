@@ -14,6 +14,29 @@ let closeActiveEditor = null;
 let undoStack = [];
 let redoStack = [];
 
+// 非編集時も常時フォーカスを保持する不可視input。IME切替キー等をブラウザ標準動作に委ねるための仕組み
+const keyCapture = document.getElementById('key-capture');
+
+// IME変換候補ウィンドウが正しい位置に出るよう、アクティブセルの位置に重ねてから focus する
+function positionKeyCaptureAtActiveCell() {
+  const selector = activeSubtableIndex === null
+    ? `#table-body td[data-row="${activeCell.row}"][data-col="${activeCell.col}"]`
+    : `#subtable-container td[data-table="${activeSubtableIndex}"][data-row="${activeCell.row}"][data-col="${activeCell.col}"]`;
+  const cellEl = document.querySelector(selector);
+  if (!cellEl) return;
+  const rect = cellEl.getBoundingClientRect();
+  keyCapture.style.top = `${rect.top}px`;
+  keyCapture.style.left = `${rect.left}px`;
+  keyCapture.style.width = `${Math.max(rect.width, 1)}px`;
+  keyCapture.style.height = `${Math.max(rect.height, 1)}px`;
+}
+
+function focusKeyCapture() {
+  if (isEditing || !keyCapture) return;
+  positionKeyCaptureAtActiveCell();
+  keyCapture.focus({ preventScroll: true });
+}
+
 function cloneData(data) {
   return JSON.parse(JSON.stringify(data || { schema: '', items: [] }));
 }
@@ -346,14 +369,14 @@ function validateColumn(column, value) {
   return { valid: true };
 }
 
-function startSubtableEditing(subtableIndex, rowIndex, colIndex, cell) {
+function startSubtableEditing(subtableIndex, rowIndex, colIndex, cell, initialValue) {
   if (isEditing && closeActiveEditor) closeActiveEditor(true);
   isEditing = true;
 
   const subtable = schema.subtables[subtableIndex];
   const column = subtable.columns[colIndex];
   const items = Array.isArray(currentData[subtable.data_key]) ? currentData[subtable.data_key] : [];
-  const currentValue = items[rowIndex]?.[column.key] ?? '';
+  const currentValue = initialValue !== undefined ? initialValue : (items[rowIndex]?.[column.key] ?? '');
   const editor = column.type === 'select' ? document.createElement('select') : document.createElement('textarea');
   editor.className = 'cell-editor subtable-editor';
   editor.value = currentValue;
@@ -387,6 +410,7 @@ function startSubtableEditing(subtableIndex, rowIndex, colIndex, cell) {
     isEditing = false;
     closeActiveEditor = null;
     renderSubtables();
+    focusKeyCapture();
   };
   closeActiveEditor = finish;
 
@@ -412,18 +436,28 @@ function startSubtableEditing(subtableIndex, rowIndex, colIndex, cell) {
   editor.addEventListener('blur', () => finish(true));
   cell.appendChild(editor);
   editor.focus();
-  if (column.type !== 'select') editor.select();
+  if (column.type === 'select') {
+    // no-op: select型は選択操作のみ
+  } else if (initialValue !== undefined) {
+    const len = editor.value.length;
+    setTimeout(() => editor.setSelectionRange(len, len), 0);
+  } else {
+    editor.select();
+  }
 }
 
 function onCellMouseDown(e, row, col, subtableIndex = null) {
   if (isEditing && closeActiveEditor) closeActiveEditor(true);
   if (e.button !== 0) return;
+  // td既定のフォーカス処理（非フォーカス要素へのblur等）がkeyCaptureへのfocus()を上書きするのを防ぐ
+  e.preventDefault();
   isMouseDown = true;
   activeSubtableIndex = subtableIndex;
   selectionStart = { row, col };
   selectionEnd = { row, col };
   activeCell = { row, col };
   updateSelectionUI();
+  focusKeyCapture();
 }
 
 function onCellMouseEnter(row, col, subtableIndex = null) {
@@ -459,7 +493,7 @@ function updateSelectionUI() {
   });
 }
 
-function startEditing(row, col) {
+function startEditing(row, col, initialValue) {
   if (isEditing && closeActiveEditor) closeActiveEditor(true);
   isEditing = true;
   closeActiveEditor = closeEditor;
@@ -473,7 +507,7 @@ function startEditing(row, col) {
   if (!td) return;
 
   const conf = schema.columns[col];
-  const currentVal = (currentData.items[row] && currentData.items[row][conf.key]) ?? '';
+  const currentVal = initialValue !== undefined ? initialValue : ((currentData.items[row] && currentData.items[row][conf.key]) ?? '');
 
   let editor;
 
@@ -536,7 +570,13 @@ function startEditing(row, col) {
       if (isEditing) closeEditor(true);
     });
 
-    setTimeout(() => { editor.select(); }, 0);
+    // Excelのように直接入力を開始した場合は選択せずカーソルを末尾に置く
+    if (initialValue !== undefined) {
+      const len = editor.value.length;
+      setTimeout(() => editor.setSelectionRange(len, len), 0);
+    } else {
+      setTimeout(() => { editor.select(); }, 0);
+    }
   }
 
   td.appendChild(editor);
@@ -565,6 +605,7 @@ function closeEditor(saveChanges) {
   isEditing = false;
   closeActiveEditor = null;
   renderRows();
+  focusKeyCapture();
 }
 
 function moveActiveCell(rDelta, cDelta) {
@@ -578,23 +619,24 @@ function moveActiveCell(rDelta, cDelta) {
   selectionStart = { ...activeCell };
   selectionEnd = { ...activeCell };
   updateSelectionUI();
+  positionKeyCaptureAtActiveCell();
 }
 
 // メインテーブル・サブテーブル共通: アクティブセルで編集モードへ入る
-function startEditingAtActiveCell() {
+function startEditingAtActiveCell(initialValue) {
   if (activeSubtableIndex === null) {
-    startEditing(activeCell.row, activeCell.col);
+    startEditing(activeCell.row, activeCell.col, initialValue);
     return;
   }
   const cell = document.querySelector(
     `#subtable-container td[data-table="${activeSubtableIndex}"][data-row="${activeCell.row}"][data-col="${activeCell.col}"]`
   );
-  if (cell) startSubtableEditing(activeSubtableIndex, activeCell.row, activeCell.col, cell);
+  if (cell) startSubtableEditing(activeSubtableIndex, activeCell.row, activeCell.col, cell, initialValue);
 }
 
 // キーボード制御（セル移動と確定操作に限定し、IME誤爆を防ぐ）
-window.addEventListener('keydown', (e) => {
-  if (isEditing || e.isComposing || e.keyCode === 229) return;
+keyCapture.addEventListener('keydown', (e) => {
+  if (e.isComposing || e.keyCode === 229) return;
 
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); saveCurrentData(); return; }
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); undoHistory(); return; }
@@ -608,6 +650,24 @@ window.addEventListener('keydown', (e) => {
   if (e.key === 'Tab')        { moveActiveCell(0, e.shiftKey ? -1 : 1); e.preventDefault(); }
   if (e.key === 'Delete' || e.key === 'Backspace') { clearRange(); e.preventDefault(); }
 });
+
+// Excelのように、非編集状態から文字を入力すると即編集開始。IME切替キー等の判定はブラウザ標準の
+// input/compositionendイベントに委ねるため、個別のキーコードを推測する必要がない
+function finalizeKeyCapture() {
+  const typed = keyCapture.value;
+  keyCapture.value = '';
+  if (!typed || isEditing) return;
+  const table = getActiveTable();
+  const colConf = table.columns[activeCell.col];
+  if (colConf && colConf.type !== 'select') {
+    startEditingAtActiveCell(typed);
+  }
+}
+keyCapture.addEventListener('input', (e) => {
+  if (e.isComposing) return;
+  finalizeKeyCapture();
+});
+keyCapture.addEventListener('compositionend', () => finalizeKeyCapture());
 
 function copyRange() {
   const { minR, maxR, minC, maxC } = getSelectedBounds();
@@ -743,6 +803,7 @@ window.addEventListener('message', e => {
     undoStack = [cloneData(currentData)];
     redoStack = [];
     setupStructure();
+    focusKeyCapture();
   }
 });
 

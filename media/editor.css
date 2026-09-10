@@ -157,3 +157,16 @@ textarea.cell-editor {
   font-size: 13px;
   margin: 0 0 8px;
 }
+
+/* 非編集時にIME/OSのキー処理を素通しさせるための不可視フォーカス保持用input */
+.key-capture {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  border: none;
+  opacity: 0;
+  pointer-events: none;
+}
