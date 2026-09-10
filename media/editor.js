@@ -10,6 +10,7 @@ let selectionEnd = null;
 let activeCell = { row: 0, col: 0 };
 let activeSubtableIndex = null;
 let isEditing = false;
+let closeActiveEditor = null;
 let undoStack = [];
 let redoStack = [];
 
@@ -346,6 +347,9 @@ function validateColumn(column, value) {
 }
 
 function startSubtableEditing(subtableIndex, rowIndex, colIndex, cell) {
+  if (isEditing && closeActiveEditor) closeActiveEditor(true);
+  isEditing = true;
+
   const subtable = schema.subtables[subtableIndex];
   const column = subtable.columns[colIndex];
   const items = Array.isArray(currentData[subtable.data_key]) ? currentData[subtable.data_key] : [];
@@ -380,15 +384,29 @@ function startSubtableEditing(subtableIndex, rowIndex, colIndex, cell) {
       notifyChange();
     }
     editor.remove();
+    isEditing = false;
+    closeActiveEditor = null;
     renderSubtables();
   };
+  closeActiveEditor = finish;
 
   editor.addEventListener('mousedown', event => event.stopPropagation());
+  editor.addEventListener('click', event => event.stopPropagation());
+  // 【メインテーブルと同一操作】Enterで確定し次行へ、Tabで確定し次列へ、Escapeでキャンセル
   editor.addEventListener('keydown', event => {
     event.stopPropagation();
     if (event.isComposing || event.keyCode === 229) return;
-    if (event.key === 'Escape') finish(false);
-    if (event.key === 'Enter' && column.type === 'select') finish(true);
+    if (event.key === 'Escape') {
+      finish(false);
+    } else if (event.key === 'Enter' && !event.altKey && !event.ctrlKey && !event.shiftKey) {
+      event.preventDefault();
+      finish(true);
+      moveActiveCell(1, 0);
+    } else if (event.key === 'Tab') {
+      event.preventDefault();
+      finish(true);
+      moveActiveCell(0, event.shiftKey ? -1 : 1);
+    }
   });
   editor.addEventListener('change', () => finish(true));
   editor.addEventListener('blur', () => finish(true));
@@ -398,7 +416,7 @@ function startSubtableEditing(subtableIndex, rowIndex, colIndex, cell) {
 }
 
 function onCellMouseDown(e, row, col, subtableIndex = null) {
-  if (isEditing) closeEditor(true);
+  if (isEditing && closeActiveEditor) closeActiveEditor(true);
   if (e.button !== 0) return;
   isMouseDown = true;
   activeSubtableIndex = subtableIndex;
@@ -442,8 +460,9 @@ function updateSelectionUI() {
 }
 
 function startEditing(row, col) {
-  if (isEditing) closeEditor(true);
+  if (isEditing && closeActiveEditor) closeActiveEditor(true);
   isEditing = true;
+  closeActiveEditor = closeEditor;
 
   activeCell = { row, col };
   selectionStart = { row, col };
@@ -544,6 +563,7 @@ function closeEditor(saveChanges) {
     editor.remove();
   }
   isEditing = false;
+  closeActiveEditor = null;
   renderRows();
 }
 
@@ -560,6 +580,18 @@ function moveActiveCell(rDelta, cDelta) {
   updateSelectionUI();
 }
 
+// メインテーブル・サブテーブル共通: アクティブセルで編集モードへ入る
+function startEditingAtActiveCell() {
+  if (activeSubtableIndex === null) {
+    startEditing(activeCell.row, activeCell.col);
+    return;
+  }
+  const cell = document.querySelector(
+    `#subtable-container td[data-table="${activeSubtableIndex}"][data-row="${activeCell.row}"][data-col="${activeCell.col}"]`
+  );
+  if (cell) startSubtableEditing(activeSubtableIndex, activeCell.row, activeCell.col, cell);
+}
+
 // キーボード制御（セル移動と確定操作に限定し、IME誤爆を防ぐ）
 window.addEventListener('keydown', (e) => {
   if (isEditing || e.isComposing || e.keyCode === 229) return;
@@ -568,7 +600,7 @@ window.addEventListener('keydown', (e) => {
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); undoHistory(); return; }
   if ((e.ctrlKey || e.metaKey) && (e.key.toLowerCase() === 'y' || (e.shiftKey && e.key.toLowerCase() === 'z'))) { e.preventDefault(); redoHistory(); return; }
   if ((e.ctrlKey || e.metaKey) && e.key === 'c') { copyRange(); e.preventDefault(); return; }
-  if ((e.key === 'Enter' || e.key === 'F2') && activeSubtableIndex === null) { startEditing(activeCell.row, activeCell.col); e.preventDefault(); return; }
+  if (e.key === 'Enter' || e.key === 'F2') { startEditingAtActiveCell(); e.preventDefault(); return; }
   if (e.key === 'ArrowUp')    { moveActiveCell(-1, 0); e.preventDefault(); }
   if (e.key === 'ArrowDown')  { moveActiveCell(1, 0);  e.preventDefault(); }
   if (e.key === 'ArrowLeft')  { moveActiveCell(0, -1); e.preventDefault(); }
