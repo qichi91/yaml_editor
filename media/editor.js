@@ -91,16 +91,25 @@ function redoHistory() {
   restoreSnapshot(next);
 }
 
+// 値が空、もしくは列の初期値と同じ場合は「未入力」とみなす
+function isBlankValue(value, defaultValue) {
+  if (value === null || value === undefined) return true;
+  const str = value.toString().trim();
+  if (str === '') return true;
+  return defaultValue !== undefined && defaultValue !== null && str === defaultValue.toString().trim();
+}
+
+function isRowBlank(row, columns) {
+  const defaultsByKey = new Map((columns || []).map(col => [col.key, col.default]));
+  return Object.entries(row || {}).every(([key, value]) => isBlankValue(value, defaultsByKey.get(key)));
+}
+
 function buildDirtyData() {
-  const cleanItems = (currentData.items || []).filter(row =>
-    Object.values(row || {}).some(v => v !== null && v !== undefined && v.toString().trim() !== '')
-  );
+  const cleanItems = (currentData.items || []).filter(row => !isRowBlank(row, schema.columns));
   const nextData = { ...currentData, items: cleanItems };
   (schema.subtables || []).forEach(subtable => {
     const subtableItems = Array.isArray(currentData[subtable.data_key]) ? currentData[subtable.data_key] : [];
-    nextData[subtable.data_key] = subtableItems.filter(row =>
-      Object.values(row || {}).some(v => v !== null && v !== undefined && v.toString().trim() !== '')
-    );
+    nextData[subtable.data_key] = subtableItems.filter(row => !isRowBlank(row, subtable.columns));
   });
   return nextData;
 }
@@ -275,13 +284,13 @@ function renderRows() {
 
 function createEmptyRow() {
   const row = {};
-  if (schema) schema.columns.forEach(c => row[c.key] = '');
+  if (schema) schema.columns.forEach(c => row[c.key] = c.default ?? '');
   return row;
 }
 
 function createEmptySubtableRow(subtable) {
   const row = {};
-  subtable.columns.forEach(column => row[column.key] = '');
+  subtable.columns.forEach(column => row[column.key] = column.default ?? '');
   return row;
 }
 

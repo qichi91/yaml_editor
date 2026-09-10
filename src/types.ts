@@ -9,6 +9,7 @@ export interface ColumnConfig {
   pattern?: string;
   pattern_error?: string;
   align?: 'left' | 'center' | 'right';
+  default?: string;
 }
 
 export interface HeaderConfig {

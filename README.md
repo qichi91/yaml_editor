@@ -135,6 +135,7 @@ headers:
 | `pattern` | JavaScript の正規表現として評価する文字列 |
 | `pattern_error` | `pattern` 不一致時のエラーメッセージ |
 | `align` | Markdown の区切り行の配置。`left`、`center`、`right` |
+| `default` | 新規行作成時にセルへ入力しておく初期値（例: `-`）。値が空、またはこの初期値のままの行は保存データとして扱われない |
 
 `pattern` は `string` 専用ではなく、値が空でないすべての列に適用されます。`select` では `options_strict` のチェック後に適用されます。値全体を検証する場合は `^` と `$` を付けてください。
 

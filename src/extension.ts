@@ -4,8 +4,18 @@ import * as path from 'path';
 import * as yaml from 'js-yaml';
 import { SchemaManager } from './schemaManager';
 import { MarkdownGenerator } from './markdownGenerator';
-import { SpecData, TableSchema } from './types';
+import { SpecData, TableSchema, ColumnConfig } from './types';
 import { sanitizeForSave } from './dataUtils';
+
+// items/サブテーブルのdata_keyごとに列定義をまとめる（初期値と同じ値を空欄扱いするため）
+function buildColumnsByKey(schema?: TableSchema): Record<string, ColumnConfig[]> {
+  if (!schema) return {};
+  const map: Record<string, ColumnConfig[]> = { items: schema.columns };
+  for (const subtable of schema.subtables || []) {
+    map[subtable.data_key] = subtable.columns;
+  }
+  return map;
+}
 
 export async function activate(context: vscode.ExtensionContext) {
   const output = vscode.window.createOutputChannel('Table Spec Editor');
@@ -155,7 +165,7 @@ export async function activate(context: vscode.ExtensionContext) {
               ...currentData,
               ...incomingData,
               items: mergedItems
-            });
+            }, buildColumnsByKey(schemaManager.getSchema(incomingData.schema)));
 
             for (const subtable of schemaManager.getSchema(incomingData.schema)?.subtables || []) {
               const incomingSubtableItems = Array.isArray(incomingData[subtable.data_key])
@@ -170,7 +180,7 @@ export async function activate(context: vscode.ExtensionContext) {
               }));
             }
 
-            const yamlText = yaml.dump(sanitizeForSave(finalData), {
+            const yamlText = yaml.dump(sanitizeForSave(finalData, buildColumnsByKey(schemaManager.getSchema(incomingData.schema))), {
               sortKeys: false,
               lineWidth: -1,
               quotingType: '"',
