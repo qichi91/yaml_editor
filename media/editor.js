@@ -417,10 +417,35 @@ function renderSubtables() {
     const section = document.createElement('section');
     section.className = 'subtable-section';
 
+    const toolbar = document.createElement('div');
+    toolbar.className = 'table-toolbar';
     const title = document.createElement('h3');
     title.className = 'subtable-title';
     title.textContent = subtable.title;
-    section.appendChild(title);
+    toolbar.appendChild(title);
+
+    const copyButton = document.createElement('button');
+    copyButton.type = 'button';
+    copyButton.className = 'table-copy-button';
+    copyButton.textContent = 'エクスポート';
+    copyButton.title = '行番号・列見出し・全データをExcel向けにコピー';
+    copyButton.addEventListener('click', () => {
+      const items = Array.isArray(currentData[subtable.data_key]) ? currentData[subtable.data_key] : [];
+      const rowNumbers = computeHierarchicalNumbers(items).map(entry => entry.label);
+      copyWholeTable(subtable.columns, items, copyButton, rowNumbers);
+    });
+    toolbar.appendChild(copyButton);
+
+    const importButton = document.createElement('button');
+    importButton.type = 'button';
+    importButton.className = 'table-import-button';
+    importButton.textContent = 'インポート';
+    importButton.title = 'エクスポート形式（行番号列付き）のクリップボード内容でテーブル全体を置き換え';
+    importButton.addEventListener('click', () => {
+      importWholeTable(subtable.columns, subtable.data_key, renderSubtables, importButton);
+    });
+    toolbar.appendChild(importButton);
+    section.appendChild(toolbar);
 
     const table = document.createElement('table');
     const thead = document.createElement('thead');
@@ -798,36 +823,131 @@ keyCapture.addEventListener('input', (e) => {
 keyCapture.addEventListener('compositionend', () => finalizeKeyCapture());
 
 // ===== Excel連携（コピー・貼り付け） =====
-function copyRange() {
-  const { minR, maxR, minC, maxC } = getSelectedBounds();
-  const table = getActiveTable();
+function escapeHtml(value) {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/\r?\n/g, '<br style="mso-data-placement:same-cell;">');
+}
+
+function formatTsvValue(value) {
+  return /[\r\n"\t]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
+}
+
+function buildClipboardTable(columns, items, includeHeaders, rowNumbers) {
   const plain = [];
   let html = '<table border="1">';
 
-  for (let r = minR; r <= maxR; r++) {
-    const item = table.items[r] || {};
-    const cols = [];
-    html += '<tr>';
-    for (let c = minC; c <= maxC; c++) {
-      let val = (item[table.columns[c].key] ?? '').toString();
-      let pVal = (val.includes('\n') || val.includes('"') || val.includes('\t')) ? `"${val.replace(/"/g, '""')}"` : val;
-      cols.push(pVal);
-
-      let hVal = val.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\r?\n/g, '<br style="mso-data-placement:same-cell;">');
-      html += `<td style="mso-number-format:'\\@';">${hVal}</td>`;
-    }
-    plain.push(cols.join('\t'));
-    html += '</tr>';
+  if (includeHeaders) {
+    const headerLabels = rowNumbers ? ['#', ...columns.map(column => column.label.toString())] : columns.map(column => column.label.toString());
+    plain.push(headerLabels.map(formatTsvValue).join('\t'));
+    html += `<tr>${headerLabels.map(label => `<th>${escapeHtml(label)}</th>`).join('')}</tr>`;
   }
+
+  items.forEach((item, index) => {
+    const values = columns.map(column => (item[column.key] ?? '').toString());
+    if (rowNumbers) values.unshift((rowNumbers[index] ?? '').toString());
+    plain.push(values.map(formatTsvValue).join('\t'));
+    html += '<tr>';
+    values.forEach(value => {
+      html += `<td style="mso-number-format:'\\@';">${escapeHtml(value)}</td>`;
+    });
+    html += '</tr>';
+  });
   html += '</table>';
 
-  const tsv = plain.join('\r\n');
+  return { tsv: plain.join('\r\n'), html };
+}
+
+function writeClipboardTable(columns, items, includeHeaders, rowNumbers) {
+  const { tsv, html } = buildClipboardTable(columns, items, includeHeaders, rowNumbers);
+  if (typeof ClipboardItem === 'undefined' || typeof navigator.clipboard.write !== 'function') {
+    return navigator.clipboard.writeText(tsv);
+  }
   const blobT = new Blob([tsv], { type: 'text/plain' });
   const blobH = new Blob([html], { type: 'text/html' });
-  navigator.clipboard.write([new ClipboardItem({ 'text/plain': blobT, 'text/html': blobH })]).catch(() => {
-    navigator.clipboard.writeText(tsv);
-  });
+  return navigator.clipboard.write([new ClipboardItem({ 'text/plain': blobT, 'text/html': blobH })])
+    .catch(() => navigator.clipboard.writeText(tsv));
 }
+
+function showCopyResult(button, succeeded) {
+  const originalLabel = button.textContent;
+  button.textContent = succeeded ? 'コピー済み' : 'コピー失敗';
+  button.classList.toggle('copy-success', succeeded);
+  button.classList.toggle('copy-error', !succeeded);
+  setTimeout(() => {
+    if (!button.isConnected) return;
+    button.textContent = originalLabel;
+    button.classList.remove('copy-success', 'copy-error');
+  }, 1600);
+}
+
+function copyWholeTable(columns, items, button, rowNumbers) {
+  writeClipboardTable(columns, items, true, rowNumbers)
+    .then(() => showCopyResult(button, true))
+    .catch(() => showCopyResult(button, false));
+}
+
+// 階層ラベル（"1-1"等）中のハイフン数がそのままインデント深さになる
+function computeIndentFromLabel(label) {
+  const matches = label.match(/-/g);
+  return matches ? matches.length : 0;
+}
+
+// エクスポート形式（1行目が'#'始まりの見出し、1列目が階層ラベル）のみを対象に、対象テーブルを丸ごと置き換える
+function importWholeTable(columns, dataKey, render, button) {
+  if (!navigator.clipboard || typeof navigator.clipboard.readText !== 'function') {
+    showCopyResult(button, false);
+    return;
+  }
+  navigator.clipboard.readText().then(text => {
+    const grid = parseTSV(text || '');
+    if (grid.length === 0 || (grid[0][0] || '').toString().trim() !== '#') {
+      showCopyResult(button, false);
+      return;
+    }
+
+    const newItems = [];
+    grid.slice(1).forEach(cols => {
+      const label = (cols[0] || '').toString().trim();
+      if (label === '') return;
+      const row = { _indent: computeIndentFromLabel(label) };
+      columns.forEach((column, index) => { row[column.key] = cols[index + 1] ?? ''; });
+      if (!isRowBlank(row, columns)) newItems.push(row);
+    });
+
+    const mutated = commitBulkEdit(() => {
+      const target = Array.isArray(currentData[dataKey]) ? currentData[dataKey] : (currentData[dataKey] = []);
+      target.length = 0;
+      target.push(...newItems);
+    });
+    if (mutated) notifyChange();
+    render();
+    showCopyResult(button, true);
+  }).catch(() => showCopyResult(button, false));
+}
+
+function copyRange() {
+  const { minR, maxR, minC, maxC } = getSelectedBounds();
+  const table = getActiveTable();
+  const columns = table.columns.slice(minC, maxC + 1);
+  const items = [];
+  for (let row = minR; row <= maxR; row++) {
+    items.push(table.items[row] || {});
+  }
+  writeClipboardTable(columns, items, false).catch(() => {});
+}
+
+document.getElementById('copy-main-table').addEventListener('click', event => {
+  const mainItems = currentData.items || [];
+  const rowNumbers = computeHierarchicalNumbers(mainItems).map(entry => entry.label);
+  copyWholeTable(schema.columns, mainItems, event.currentTarget, rowNumbers);
+});
+
+document.getElementById('import-main-table').addEventListener('click', event => {
+  importWholeTable(schema.columns, 'items', renderRows, event.currentTarget);
+});
 
 function clearRange() {
   const { minR, maxR, minC, maxC } = getSelectedBounds();

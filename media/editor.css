@@ -47,6 +47,67 @@ body {
   margin-bottom: 8px;
 }
 
+.table-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  min-height: 28px;
+  margin-bottom: 6px;
+}
+
+.table-copy-button {
+  min-width: 112px;
+  border: 1px solid var(--vscode-button-border, transparent);
+  border-radius: 2px;
+  padding: 4px 10px;
+  background: var(--vscode-button-secondaryBackground, #3a3d41);
+  color: var(--vscode-button-secondaryForeground, #fff);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.table-copy-button:hover {
+  background: var(--vscode-button-secondaryHoverBackground, #45494e);
+}
+
+.table-import-button {
+  min-width: 112px;
+  border: 1px solid var(--vscode-button-border, transparent);
+  border-radius: 2px;
+  padding: 4px 10px;
+  background: var(--vscode-button-background, #0e639c);
+  color: var(--vscode-button-foreground, #fff);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.table-import-button:hover {
+  background: var(--vscode-button-hoverBackground, #1177bb);
+}
+
+.table-import-button.copy-success {
+  background: var(--vscode-testing-iconPassed, #73c991);
+  color: var(--vscode-editor-background, #1e1e1e);
+}
+
+.table-import-button.copy-error {
+  background: var(--vscode-testing-iconFailed, #f14c4c);
+  color: #fff;
+}
+
+.table-copy-button.copy-success {
+  background: var(--vscode-testing-iconPassed, #73c991);
+  color: var(--vscode-editor-background, #1e1e1e);
+}
+
+.table-copy-button.copy-error {
+  background: var(--vscode-testing-iconFailed, #f14c4c);
+  color: #fff;
+}
+
 table {
   border-collapse: collapse;
   width: 100%;
@@ -212,7 +273,15 @@ textarea.cell-editor {
 
 .subtable-title {
   font-size: 13px;
-  margin: 0 0 8px;
+  margin: 0;
+}
+
+.subtable-section .table-toolbar {
+  flex-wrap: wrap;
+}
+
+.subtable-section .table-toolbar .subtable-title {
+  margin-right: auto;
 }
 
 /* 非編集時にIME/OSのキー処理を素通しさせるための不可視フォーカス保持用input */

@@ -9,7 +9,11 @@
 
 <input id="key-capture" class="key-capture" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
 <div id="header-container" class="header-form"></div>
-<div class="tip">操作: クリック/ドラッグで選択 | <b>Ctrl+C</b> でExcelコピー | <b>ダブルクリック または Enter</b> で編集開始 | <b>Esc</b> でキャンセル</div>
+<div class="tip">操作: クリック/ドラッグで選択 | <b>Ctrl+C</b> で選択範囲をコピー | <b>ダブルクリック または Enter</b> で編集開始 | <b>Esc</b> でキャンセル</div>
+<div class="table-toolbar">
+  <button id="copy-main-table" class="table-copy-button" type="button" title="行番号・列見出し・全データをExcel向けにコピー">エクスポート</button>
+  <button id="import-main-table" class="table-import-button" type="button" title="エクスポート形式（行番号列付き）のクリップボード内容でテーブル全体を置き換え">インポート</button>
+</div>
 <div class="table-scroll">
   <table id="spec-table">
     <thead id="table-head"></thead>
