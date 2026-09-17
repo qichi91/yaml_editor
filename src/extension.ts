@@ -84,6 +84,8 @@ export async function activate(context: vscode.ExtensionContext) {
 
         // Webviewへ最後に送信したschema（ディスク上のデータは保存まで更新されないため、変更検知の基準として保持）
         let lastSyncedSchemaId = '';
+        let applyingWebviewEdit = false;
+        let updateQueue = Promise.resolve();
 
         // Webviewへデータ・スキーマ送信（data未指定時はドキュメントから再取得）
         function syncToWebview(data?: SpecData) {
@@ -109,8 +111,87 @@ export async function activate(context: vscode.ExtensionContext) {
           }
         }
 
-        // Webviewからの変更イベント: ここではファイル保存まで反映しない
-        webviewPanel.webview.onDidReceiveMessage(async message => {
+        function mergeIncomingData(incomingData: SpecData): SpecData {
+          const currentData = parseDocument();
+          const schema = schemaManager.getSchema(incomingData.schema);
+          const incomingItems = Array.isArray(incomingData.items) ? incomingData.items : currentData.items || [];
+          const mergedItems = incomingItems.map((newItem, idx) => ({
+            ...(currentData.items?.[idx] || {}),
+            ...newItem
+          }));
+          const finalData: SpecData = {
+            ...currentData,
+            ...incomingData,
+            items: mergedItems
+          };
+
+          for (const subtable of schema?.subtables || []) {
+            const incomingSubtableItems = Array.isArray(incomingData[subtable.data_key])
+              ? incomingData[subtable.data_key]
+              : [];
+            const oldSubtableItems = Array.isArray(currentData[subtable.data_key])
+              ? currentData[subtable.data_key]
+              : [];
+            finalData[subtable.data_key] = incomingSubtableItems.map((newItem: Record<string, any>, idx: number) => ({
+              ...oldSubtableItems[idx],
+              ...newItem
+            }));
+          }
+
+          return sanitizeForSave(finalData, buildColumnsByKey(schema));
+        }
+
+        async function applyIncomingData(incomingData: SpecData): Promise<void> {
+          const finalData = mergeIncomingData(incomingData);
+          const yamlText = yaml.dump(finalData, {
+            sortKeys: false,
+            lineWidth: -1,
+            quotingType: '"',
+            forceQuotes: false
+          });
+          if (yamlText === document.getText()) return;
+
+          const edit = new vscode.WorkspaceEdit();
+          edit.replace(document.uri, new vscode.Range(
+            document.positionAt(0),
+            document.positionAt(document.getText().length)
+          ), yamlText);
+          applyingWebviewEdit = true;
+          try {
+            if (!await vscode.workspace.applyEdit(edit)) {
+              throw new Error('WorkspaceEditを適用できませんでした');
+            }
+          } finally {
+            applyingWebviewEdit = false;
+          }
+          log(`YAML変更反映: ${document.uri.fsPath}, items=${finalData.items.length}`);
+        }
+
+        function enqueueUpdate(incomingData: SpecData, saveAfterUpdate: boolean): void {
+          updateQueue = updateQueue.then(async () => {
+            const schemaChanged = lastSyncedSchemaId !== incomingData.schema;
+            await applyIncomingData(incomingData);
+            if (schemaChanged) {
+              log(`スキーマ変更、Webviewを再同期: ${lastSyncedSchemaId || '(未指定)'} -> ${incomingData.schema || '(未指定)'}`);
+              syncToWebview();
+            }
+            if (saveAfterUpdate && !await document.save()) {
+              throw new Error('YAMLファイルを保存できませんでした');
+            }
+          }).catch((err: unknown) => {
+            const message = err instanceof Error ? err.message : String(err);
+            log(`YAML更新失敗: ${message}`);
+            vscode.window.showErrorMessage(`YAML更新エラー: ${message}`);
+          });
+        }
+
+        const documentChangeSubscription = vscode.workspace.onDidChangeTextDocument(event => {
+          if (event.document.uri.toString() !== document.uri.toString() || applyingWebviewEdit) return;
+          syncToWebview();
+        });
+        webviewPanel.onDidDispose(() => documentChangeSubscription.dispose());
+
+        webviewPanel.webview.onDidReceiveMessage(message => {
           log(`Webviewメッセージ: ${message.type || '(typeなし)'}`);
           if (message.type === 'ready') {
             log('Webview準備完了、初期データを再送信');
@@ -118,83 +199,11 @@ export async function activate(context: vscode.ExtensionContext) {
             return;
           }
           if (message.type === 'change') {
-            const currentData = parseDocument();
-            const incomingData = message.data as SpecData;
-            const schemaChanged = lastSyncedSchemaId !== incomingData.schema;
-
-            const mergedItems = incomingData.items.map((newItem, idx) => {
-              const oldItem = currentData.items?.[idx] || {};
-              return { ...oldItem, ...newItem };
-            });
-
-            const finalData: SpecData = {
-              ...currentData,
-              ...incomingData,
-              items: mergedItems
-            };
-
-            for (const subtable of schemaManager.getSchema(incomingData.schema)?.subtables || []) {
-              const incomingSubtableItems = Array.isArray(incomingData[subtable.data_key])
-                ? incomingData[subtable.data_key]
-                : [];
-              const oldSubtableItems = Array.isArray(currentData[subtable.data_key])
-                ? currentData[subtable.data_key]
-                : [];
-              finalData[subtable.data_key] = incomingSubtableItems.map((newItem: Record<string, any>, idx: number) => ({
-                ...oldSubtableItems[idx],
-                ...newItem
-              }));
-            }
-
-            if (schemaChanged) {
-              log(`スキーマ変更、Webviewを再同期: ${lastSyncedSchemaId || '(未指定)'} -> ${incomingData.schema || '(未指定)'}`);
-              syncToWebview(finalData);
-            }
+            enqueueUpdate(message.data as SpecData, false);
             return;
           }
           if (message.type === 'save') {
-            const incomingData = message.data as SpecData;
-            const currentData = parseDocument();
-            const schemaChanged = lastSyncedSchemaId !== incomingData.schema;
-            const mergedItems = incomingData.items.map((newItem, idx) => {
-              const oldItem = currentData.items?.[idx] || {};
-              return { ...oldItem, ...newItem };
-            });
-
-            const finalData: SpecData = sanitizeForSave({
-              ...currentData,
-              ...incomingData,
-              items: mergedItems
-            }, buildColumnsByKey(schemaManager.getSchema(incomingData.schema)));
-
-            for (const subtable of schemaManager.getSchema(incomingData.schema)?.subtables || []) {
-              const incomingSubtableItems = Array.isArray(incomingData[subtable.data_key])
-                ? incomingData[subtable.data_key]
-                : [];
-              const oldSubtableItems = Array.isArray(currentData[subtable.data_key])
-                ? currentData[subtable.data_key]
-                : [];
-              finalData[subtable.data_key] = (incomingSubtableItems || []).map((newItem: Record<string, any>, idx: number) => ({
-                ...oldSubtableItems[idx],
-                ...newItem
-              }));
-            }
-
-            const yamlText = yaml.dump(sanitizeForSave(finalData, buildColumnsByKey(schemaManager.getSchema(incomingData.schema))), {
-              sortKeys: false,
-              lineWidth: -1,
-              quotingType: '"',
-              forceQuotes: false
-            });
-
-            const edit = new vscode.WorkspaceEdit();
-            edit.replace(document.uri, new vscode.Range(0, 0, document.lineCount, 0), yamlText);
-            await vscode.workspace.applyEdit(edit);
-            log(`YAML保存適用: ${document.uri.fsPath}, items=${finalData.items.length}`);
-            if (schemaChanged) {
-              log(`スキーマ変更、Webviewを再同期: ${lastSyncedSchemaId || '(未指定)'} -> ${incomingData.schema || '(未指定)'}`);
-              syncToWebview();
-            }
+            enqueueUpdate(message.data as SpecData, true);
           }
         });
 

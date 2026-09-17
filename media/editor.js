@@ -123,6 +123,16 @@ function saveCurrentData() {
   });
 }
 
+window.addEventListener('keydown', event => {
+  if (event.isComposing || event.keyCode === 229) return;
+  if (!(event.ctrlKey || event.metaKey) || event.key.toLowerCase() !== 's') return;
+
+  event.preventDefault();
+  event.stopPropagation();
+  if (isEditing && closeActiveEditor) closeActiveEditor(true);
+  saveCurrentData();
+}, true);
+
 function getActiveTable() {
   if (activeSubtableIndex === null) {
     return {
@@ -791,7 +801,6 @@ function startEditingAtActiveCell(initialValue) {
 keyCapture.addEventListener('keydown', (e) => {
   if (e.isComposing || e.keyCode === 229) return;
 
-  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); saveCurrentData(); return; }
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); undoHistory(); return; }
   if ((e.ctrlKey || e.metaKey) && (e.key.toLowerCase() === 'y' || (e.shiftKey && e.key.toLowerCase() === 'z'))) { e.preventDefault(); redoHistory(); return; }
   if ((e.ctrlKey || e.metaKey) && e.key === 'c') { copyRange(); e.preventDefault(); return; }
