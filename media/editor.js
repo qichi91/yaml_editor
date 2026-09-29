@@ -14,6 +14,8 @@ let isEditing = false;
 let closeActiveEditor = null;
 let undoStack = [];
 let redoStack = [];
+// ヘッダー入力欄の編集開始時点のスナップショット。commit 時に undo へ push する
+let headerEditStartSnapshot = null;
 
 // 非編集時も常時フォーカスを保持する不可視input。IME切替キー等をブラウザ標準動作に委ねるための仕組み
 const keyCapture = document.getElementById('key-capture');
@@ -36,6 +38,12 @@ function focusKeyCapture() {
   if (isEditing || !keyCapture) return;
   positionKeyCaptureAtActiveCell();
   keyCapture.focus({ preventScroll: true });
+}
+
+// ヘッダー入力欄にフォーカスがあるか判定（window paste ハンドラ等でテーブル操作をスキップする用）
+function isHeaderInputFocused() {
+  const el = document.activeElement;
+  return el && el.tagName === 'INPUT' && el.closest('#header-container') !== null;
 }
 
 function cloneData(data) {
@@ -70,10 +78,43 @@ function restoreSnapshot(snapshot) {
   if (!snapshot) return;
   currentData = cloneData(snapshot);
   if (!Array.isArray(currentData.items)) currentData.items = [];
+  headerEditStartSnapshot = null;
   renderRows();
   renderSubtables();
   updateSelectionUI();
+  syncHeaderInputs();
   notifyChange();
+}
+
+// undo/redo 後に currentData とヘッダー入力欄の値を同期する
+function syncHeaderInputs() {
+  const headContainer = document.getElementById('header-container');
+  if (!headContainer) return;
+  headContainer.querySelectorAll('input[data-key]').forEach(input => {
+    input.value = currentData[input.dataset.key] || '';
+  });
+}
+
+// ヘッダー入力欄の編集を確定する（commit 時にのみ undo へ push）
+function commitHeaderInput(input) {
+  const key = input.dataset.key;
+  if (!key) return;
+  const startValue = headerEditStartSnapshot ? (headerEditStartSnapshot[key] || '') : (currentData[key] || '');
+  headerEditStartSnapshot = null;
+  if (startValue === (currentData[key] || '')) return; // 変更なし
+  const before = cloneData(currentData);
+  before[key] = startValue;
+  pushUndoState(before);
+  currentData[key] = input.value;
+  notifyChange();
+}
+
+// スキーマ切替前にフォーカス中のヘッダー入力欄の編集を確定する
+function commitActiveHeaderInput() {
+  const el = document.activeElement;
+  if (el && el.tagName === 'INPUT' && el.dataset && el.dataset.key) {
+    commitHeaderInput(el);
+  }
 }
 
 function undoHistory() {
@@ -130,6 +171,7 @@ window.addEventListener('keydown', event => {
   event.preventDefault();
   event.stopPropagation();
   if (isEditing && closeActiveEditor) closeActiveEditor(true);
+  commitActiveHeaderInput();
   saveCurrentData();
 }, true);
 
@@ -200,6 +242,7 @@ function setupStructure() {
     schemaSelect.appendChild(opt);
   });
   schemaSelect.addEventListener('change', () => {
+    commitActiveHeaderInput();
     const before = cloneData(currentData);
     pushUndoState(before);
     currentData.schema = schemaSelect.value;
@@ -214,12 +257,29 @@ function setupStructure() {
     label.textContent = h.label + ':';
     const input = document.createElement('input');
     input.type = 'text';
+    input.dataset.key = h.key;
     input.value = currentData[h.key] || '';
+    // 編集開始（focus）時点でスナップショットを保持し、commit 時にのみ undo へ push する
+    input.addEventListener('focus', () => {
+      headerEditStartSnapshot = cloneData(currentData);
+    });
     input.addEventListener('input', () => {
-      const before = cloneData(currentData);
-      pushUndoState(before);
       currentData[h.key] = input.value;
       notifyChange();
+    });
+    input.addEventListener('blur', () => {
+      commitHeaderInput(input);
+    });
+    input.addEventListener('keydown', (e) => {
+      if (e.isComposing || e.keyCode === 229) return;
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        commitHeaderInput(input);
+        input.blur();
+        return;
+      }
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'z') { e.preventDefault(); undoHistory(); return; }
+      if ((e.ctrlKey || e.metaKey) && (e.key.toLowerCase() === 'y' || (e.shiftKey && e.key.toLowerCase() === 'z'))) { e.preventDefault(); redoHistory(); return; }
     });
     label.appendChild(input);
     headContainer.appendChild(label);
@@ -992,6 +1052,7 @@ function clearRange() {
 
 window.addEventListener('paste', (e) => {
   if (isEditing) return;
+  if (isHeaderInputFocused()) return;
   const text = (e.clipboardData || window.clipboardData).getData('text');
   if (!text) return;
   e.preventDefault();
@@ -1061,6 +1122,7 @@ window.addEventListener('message', e => {
     if (!currentData.items) currentData.items = [];
     undoStack = [cloneData(currentData)];
     redoStack = [];
+    headerEditStartSnapshot = null;
     setupStructure();
     focusKeyCapture();
   }

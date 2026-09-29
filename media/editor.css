@@ -31,7 +31,9 @@ body {
   font-weight: bold;
 }
 
-.header-form input,
+.header-form input {
+  min-width: 440px;
+}
 .header-form select {
   background: var(--vscode-input-background, #3c3c3c);
   color: var(--vscode-input-foreground, #fff);
