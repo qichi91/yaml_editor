@@ -114,14 +114,16 @@ markdown_template: |
 | `schema_version` | ○ | スキーマのバージョン文字列 |
 | `title` | ○ | Markdown 出力などで使用する仕様書名 |
 | `headers` | - | テーブル外に表示する共通入力欄 |
+| `header_layout` | - | `vertical` の場合、共通情報を「項目」「値」の2列表で表示。未指定時は従来どおり横並び |
 | `columns` | ○ | メインテーブルの列定義 |
 | `subtables` | - | メインテーブル以外のテーブル定義 |
 | `markdown_template` | ○ | Markdown 出力テンプレート |
 | `row_number_width` | - | 行番号列の幅（px）。階層番号や切替ボタンが収まる幅を指定できる（未指定時は既定値） |
+| `scenario_heading` | - | メインテーブルの各行をシナリオとして扱い、自動見出しを付ける設定 |
 
 ### `headers`
 
-ヘッダー入力欄を定義します。`key` は spec YAML のトップレベルキー、`label` は画面表示名です。
+ヘッダー入力欄を定義します。`key` は spec YAML のトップレベルキー、`label` は画面表示名です。`type: multiline` は複数行入力、`required` と `pattern` / `pattern_error` は入力検証に使います。
 
 ```yaml
 headers:
@@ -132,6 +134,8 @@ headers:
 		label: 担当者
 ```
 
+`header_layout: vertical` を指定すると、各ヘッダーを項目名・値の2列で縦に並べます。未指定または `horizontal` では既存スキーマの横並び表示を維持します。
+
 ### `columns`
 
 各列では次の項目を指定できます。
@@ -141,7 +145,7 @@ headers:
 | `key` | 行データ内のキー |
 | `label` | テーブルヘッダーに表示する名前 |
 | `width` | 初期列幅（px） |
-| `type` | `string`、`multiline`、`select` のいずれか |
+| `type` | `string`、`multiline`、`select` のいずれか（ヘッダーは `string` / `multiline`） |
 | `options` | `select` で表示する選択肢の配列 |
 | `options_strict` | `true` の場合、選択肢にない値をエラーにする |
 | `required` | `true` の場合、空値をエラーにする |
@@ -175,6 +179,30 @@ columns:
 ```
 
 完全なサンプルは `schemas/sample-all.schema.yaml` を参照してください。既存のサンプルとして `schemas/api-param.schema.yaml` と `schemas/screen-item.schema.yaml` も含まれています。
+
+### シナリオ見出し
+
+メインテーブルまたはサブテーブルに `scenario_heading` を設定すると、各行を1つのシナリオとして扱います。行のインデントから `シナリオ1`、`シナリオ2-1` のような番号を自動計算し、エディタの行番号欄と Markdown に見出しを表示します。インデント階層が深くなると Markdown の見出しレベルも下がります。見出し番号や見出し文字列をデータ YAML に手入力する必要はありません。
+
+```yaml
+scenario_heading:
+	label: シナリオ
+	markdown_level: 3
+
+columns:
+	- key: steps
+		label: シナリオの手順
+		type: multiline
+		required: true
+```
+
+メインフローは `items`、代替フローは `subtables` の別々の `data_key` で管理できます。シナリオごとに1行を使い、複数の手順は `multiline` の値に記述します。行番号欄のインデントボタンで階層を付けると、たとえば `1, 2, 2-1, 2-2, 3` の番号と対応する見出しが自動生成されます。メインフローと代替フローの番号はそれぞれ独立して計算されます。
+
+ユースケース記述用の設定例は `schemas/usecase.schema.yaml`、spec データ例は `sample/usecase.spec.yaml` を参照してください。
+
+ユースケースのアクター、条件、トリガーはそれぞれ独立したサブテーブルで管理します。アクター表には複数のアクターを登録でき、条件表では「事前条件」「事後条件」を行ごとに選択します。トリガーも複数行で記述できます。これらの表の内容は生成 Markdown に一覧化され、アクターはユースケース図にも反映されます。
+
+ユースケース名・概要・パッケージ・関連要求IDも「ユースケース基本情報」表で管理します。長い内容は複数行入力でき、関連要求IDは必要な場合だけ入力できます。Markdown テンプレートで特定項目の値を使う場合は `{{basic_info:項目名}}` を指定します。項目名は同じものが複数ある場合、最初に入力された行が参照されます。
 
 ### `subtables`
 
@@ -302,6 +330,7 @@ npm run generate:markdown
 | `{{data_key_title}}` | サブテーブルの `title` |
 
 セル内の改行は `<br>` に、Markdown の `|` は `\|` に変換されます。
+`scenario_heading` を設定した行ブロックには、テンプレートに `{{row_number}}` がなくても自動見出しが追加されます。
 
 行番号列を出力する場合は、テンプレートのヘッダーと区切り行に列を追加し、行ブロック内に `{{row_number}}` を記述します。
 

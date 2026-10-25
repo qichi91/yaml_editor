@@ -1,0 +1,203 @@
+schema_id: usecase
+schema_version: "1.0"
+title: ユースケース記述書
+
+# 共通情報を「項目」「値」の縦並びで表示する
+header_layout: vertical
+headers:
+  - key: uc_id
+    label: ユースケースID
+    required: true
+    pattern: "^UC-[0-9]{3}$"
+    pattern_error: "UC-001 のような形式で入力してください"
+
+# 1行を1シナリオとして扱い、stepsにそのシナリオの手順を記述する
+scenario_heading:
+  label: シナリオ
+  markdown_level: 3
+row_number_width: 150
+columns:
+  - key: steps
+    label: シナリオの手順
+    width: 760
+    type: multiline
+    required: true
+    align: left
+
+subtables:
+  - data_key: basic_info
+    title: ユースケース基本情報
+    row_number_width: 70
+    columns:
+      - key: label
+        label: 項目
+        width: 200
+        type: select
+        options: [ユースケース名, 概要, パッケージ, 関連要求ID]
+        options_strict: true
+        required: true
+        align: left
+      - key: value
+        label: 内容
+        width: 680
+        type: multiline
+        align: left
+
+  - data_key: actors
+    title: アクター
+    row_number_width: 70
+    columns:
+      - key: name
+        label: アクター名
+        width: 240
+        type: string
+        required: true
+        align: left
+      - key: description
+        label: 役割・説明
+        width: 480
+        type: multiline
+        align: left
+
+  - data_key: conditions
+    title: 条件
+    row_number_width: 100
+    columns:
+      - key: type
+        label: 条件種別
+        width: 160
+        type: select
+        options: [事前条件, 事後条件]
+        options_strict: true
+        required: true
+        align: center
+      - key: description
+        label: 条件
+        width: 600
+        type: multiline
+        required: true
+        align: left
+
+  - data_key: triggers
+    title: トリガー
+    row_number_width: 70
+    columns:
+      - key: description
+        label: トリガー
+        width: 760
+        type: multiline
+        required: true
+        align: left
+
+  - data_key: alternate_flows
+    title: 代替フロー
+    row_number_width: 150
+    scenario_heading:
+      label: シナリオ
+      markdown_level: 3
+    columns:
+      - key: condition
+        label: 発生条件
+        width: 300
+        type: string
+        required: true
+        align: left
+      - key: steps
+        label: シナリオの手順・処置
+        width: 600
+        type: multiline
+        required: true
+        align: left
+
+  - data_key: relations
+    title: 関連ユースケース
+    row_number_width: 70
+    columns:
+      - key: relation_type
+        label: 関係種別
+        width: 140
+        type: select
+        options: [invokes, precedes]
+        options_strict: true
+        required: true
+        align: center
+      - key: target_uc
+        label: 相手先ユースケース名
+        width: 300
+        type: string
+        required: true
+        align: left
+
+markdown_template: |
+  # {{uc_id}}: {{basic_info:ユースケース名}}
+
+  ## ユースケース基本情報
+
+  | 項目 | 内容 |
+  | :--- | :--- |
+  {{#basic_info}}
+  | {{label}} | {{value}} |
+  {{/basic_info}}
+
+  ## アクター
+
+  | アクター | 役割・説明 |
+  | :--- | :--- |
+  {{#actors}}
+  | {{name}} | {{description}} |
+  {{/actors}}
+
+  ## 条件
+
+  | 条件種別 | 条件 |
+  | :--- | :--- |
+  {{#conditions}}
+  | {{type}} | {{description}} |
+  {{/conditions}}
+
+  ## トリガー
+
+  | トリガー |
+  | :--- |
+  {{#triggers}}
+  | {{description}} |
+  {{/triggers}}
+
+  ## メインフロー
+
+  {{#items}}
+  {{steps}}
+  {{/items}}
+
+  ## 代替フロー
+
+  {{#alternate_flows}}
+  **発生条件:** {{condition}}
+
+  {{steps}}
+  {{/alternate_flows}}
+
+  ## ユースケース図（PlantUML）
+
+  ```plantuml
+  @startuml
+  left to right direction
+  {{#actors}}
+  actor "{{name}}" as Actor_{{row_number}}
+  {{/actors}}
+
+  package "{{basic_info:パッケージ}}" {
+    usecase "{{basic_info:ユースケース名}}" as CurrentUC
+    {{#relations}}
+    usecase "{{target_uc}}" as UC_{{row_number}}
+    {{/relations}}
+  }
+
+  {{#actors}}
+  Actor_{{row_number}} --> CurrentUC
+  {{/actors}}
+  {{#relations}}
+  CurrentUC ..> UC_{{row_number}} : <<{{relation_type}}>>
+  {{/relations}}
+  @enduml
+  ```

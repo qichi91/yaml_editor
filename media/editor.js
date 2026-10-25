@@ -43,7 +43,7 @@ function focusKeyCapture() {
 // ヘッダー入力欄にフォーカスがあるか判定（window paste ハンドラ等でテーブル操作をスキップする用）
 function isHeaderInputFocused() {
   const el = document.activeElement;
-  return el && el.tagName === 'INPUT' && el.closest('#header-container') !== null;
+  return el && ['INPUT', 'TEXTAREA'].includes(el.tagName) && el.closest('#header-container') !== null;
 }
 
 function cloneData(data) {
@@ -90,9 +90,23 @@ function restoreSnapshot(snapshot) {
 function syncHeaderInputs() {
   const headContainer = document.getElementById('header-container');
   if (!headContainer) return;
-  headContainer.querySelectorAll('input[data-key]').forEach(input => {
+  headContainer.querySelectorAll('[data-key]').forEach(input => {
     input.value = currentData[input.dataset.key] || '';
+    const header = schema.headers?.find(candidate => candidate.key === input.dataset.key);
+    if (header) validateHeaderInput(input, header);
   });
+}
+
+function validateHeaderInput(input, header) {
+  const value = input.value.trim();
+  let error = '';
+  if (header.required && !value) error = `${header.label} は必須項目です`;
+  else if (value && header.pattern && !(new RegExp(header.pattern)).test(value)) {
+    error = header.pattern_error || `形式が不正です (${header.pattern})`;
+  }
+  input.classList.toggle('header-field-error', Boolean(error));
+  input.setAttribute('aria-invalid', String(Boolean(error)));
+  input.title = error;
 }
 
 // ヘッダー入力欄の編集を確定する（commit 時にのみ undo へ push）
@@ -112,7 +126,7 @@ function commitHeaderInput(input) {
 // スキーマ切替前にフォーカス中のヘッダー入力欄の編集を確定する
 function commitActiveHeaderInput() {
   const el = document.activeElement;
-  if (el && el.tagName === 'INPUT' && el.dataset && el.dataset.key) {
+  if (el && ['INPUT', 'TEXTAREA'].includes(el.tagName) && el.dataset && el.dataset.key) {
     commitHeaderInput(el);
   }
 }
@@ -229,6 +243,7 @@ function setupStructure() {
 
   const headContainer = document.getElementById('header-container');
   headContainer.innerHTML = '';
+  headContainer.classList.toggle('vertical', schema.header_layout === 'vertical');
 
   // スキーマ選択プルダウン
   const schemaLabel = document.createElement('label');
@@ -251,20 +266,24 @@ function setupStructure() {
   schemaLabel.appendChild(schemaSelect);
   headContainer.appendChild(schemaLabel);
 
-  // 定義ファイル固有のヘッダー項目
-  (schema.headers || []).forEach(h => {
+  const headerFields = (schema.headers || []).map(h => {
     const label = document.createElement('label');
     label.textContent = h.label + ':';
-    const input = document.createElement('input');
-    input.type = 'text';
-    input.dataset.key = h.key;
-    input.value = currentData[h.key] || '';
+    const input = h.type === 'multiline'
+      ? document.createElement('textarea')
+      : document.createElement('input');
+      if (input.tagName === 'INPUT') input.type = 'text';
+      input.dataset.key = h.key;
+      input.value = currentData[h.key] || '';
+      input.required = Boolean(h.required);
+      const validate = () => validateHeaderInput(input, h);
     // 編集開始（focus）時点でスナップショットを保持し、commit 時にのみ undo へ push する
     input.addEventListener('focus', () => {
       headerEditStartSnapshot = cloneData(currentData);
     });
     input.addEventListener('input', () => {
       currentData[h.key] = input.value;
+      validate();
       notifyChange();
     });
     input.addEventListener('blur', () => {
@@ -272,7 +291,7 @@ function setupStructure() {
     });
     input.addEventListener('keydown', (e) => {
       if (e.isComposing || e.keyCode === 229) return;
-      if (e.key === 'Enter') {
+      if (e.key === 'Enter' && (input.tagName !== 'TEXTAREA' || e.ctrlKey || e.metaKey)) {
         e.preventDefault();
         commitHeaderInput(input);
         input.blur();
@@ -282,8 +301,29 @@ function setupStructure() {
       if ((e.ctrlKey || e.metaKey) && (e.key.toLowerCase() === 'y' || (e.shiftKey && e.key.toLowerCase() === 'z'))) { e.preventDefault(); redoHistory(); return; }
     });
     label.appendChild(input);
-    headContainer.appendChild(label);
+    return label;
   });
+
+  // 定義ファイル固有のヘッダー項目
+  if (schema.header_layout === 'vertical') {
+    const fieldsTable = document.createElement('table');
+    fieldsTable.className = 'header-fields-table';
+    const body = document.createElement('tbody');
+    headerFields.forEach(label => {
+      const row = document.createElement('tr');
+      const heading = document.createElement('th');
+      heading.textContent = label.firstChild.textContent.replace(/:$/, '');
+      heading.scope = 'row';
+      const value = document.createElement('td');
+      value.appendChild(label.lastChild);
+      row.append(heading, value);
+      body.appendChild(row);
+    });
+    fieldsTable.appendChild(body);
+    headContainer.appendChild(fieldsTable);
+  } else {
+    headerFields.forEach(label => headContainer.appendChild(label));
+  }
 
   // テーブルヘッダー
   const thead = document.getElementById('table-head');
@@ -320,6 +360,10 @@ function computeHierarchicalNumbers(items) {
     counters.length = level + 1;
     return { label: counters.join('-'), level };
   });
+}
+
+function formatRowNumber(entry, headingConfig) {
+  return headingConfig ? `${headingConfig.label || 'シナリオ'}${entry.label}` : entry.label;
 }
 
 // minRow〜maxRowの各行を子/親レベルへ移動。行ごとに直前行の階層を超えて飛び級しないようクランプして_indentへ保存する
@@ -380,7 +424,10 @@ function buildRowNumCell(rowIndex, isLastRow, entry, subtableIndex) {
 
   const numSpan = document.createElement('span');
   numSpan.className = 'row-num-text';
-  numSpan.textContent = entry.label;
+  const headingConfig = subtableIndex === null
+    ? schema.scenario_heading
+    : schema.subtables[subtableIndex].scenario_heading;
+  numSpan.textContent = formatRowNumber(entry, headingConfig);
 
   const outdentBtn = document.createElement('button');
   outdentBtn.type = 'button';
@@ -501,7 +548,8 @@ function renderSubtables() {
     copyButton.title = '行番号・列見出し・全データをExcel向けにコピー';
     copyButton.addEventListener('click', () => {
       const items = Array.isArray(currentData[subtable.data_key]) ? currentData[subtable.data_key] : [];
-      const rowNumbers = computeHierarchicalNumbers(items).map(entry => entry.label);
+      const rowNumbers = computeHierarchicalNumbers(items)
+        .map(entry => formatRowNumber(entry, subtable.scenario_heading));
       copyWholeTable(subtable.columns, items, copyButton, rowNumbers);
     });
     toolbar.appendChild(copyButton);
@@ -1010,7 +1058,8 @@ function copyRange() {
 
 document.getElementById('copy-main-table').addEventListener('click', event => {
   const mainItems = currentData.items || [];
-  const rowNumbers = computeHierarchicalNumbers(mainItems).map(entry => entry.label);
+  const rowNumbers = computeHierarchicalNumbers(mainItems)
+    .map(entry => formatRowNumber(entry, schema.scenario_heading));
   copyWholeTable(schema.columns, mainItems, event.currentTarget, rowNumbers);
 });
 

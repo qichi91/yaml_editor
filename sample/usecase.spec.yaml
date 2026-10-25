@@ -1,0 +1,55 @@
+schema: usecase
+uc_id: UC-001
+basic_info:
+  - label: ユースケース名
+    value: ユーザー登録
+  - label: 概要
+    value: 利用者が新しいアカウントを登録する。
+  - label: パッケージ
+    value: アカウント管理
+  - label: 関連要求ID
+    value: REQ-001, REQ-002
+actors:
+  - name: 利用者
+    description: アカウントを登録する。
+  - name: 運用担当者
+    description: 登録状況を確認する。
+conditions:
+  - type: 事前条件
+    description: 利用者が登録画面を表示している。
+  - type: 事前条件
+    description: 利用者が有効なメールアドレスを保有している。
+  - type: 事後条件
+    description: アカウントが登録されている。
+  - type: 事後条件
+    description: 確認メールが送信されている。
+triggers:
+  - description: 利用者が新規登録を選択する。
+  - description: 招待メール内の登録リンクを開く。
+items:
+  - steps: |
+      1. 利用者は登録情報を入力する。
+      2. 利用者は登録を確定する。
+  - steps: |
+      1. システムは入力内容を検証する。
+      2. システムはアカウントを登録する。
+  - _indent: 1
+    steps: |
+      1. システムはメールアドレスの重複を検出する。
+      2. システムはエラーを表示する。
+  - _indent: 1
+    steps: |
+      1. システムは入力形式の誤りを検出する。
+      2. システムは該当項目を示す。
+  - steps: システムは登録完了を通知する。
+alternate_flows:
+  - condition: メールアドレスがすでに登録されている
+    steps: |
+      1. システムは重複エラーを表示する。
+      2. 利用者は別のメールアドレスを入力する。
+  - _indent: 1
+    condition: 利用者が入力を修正して再送信する
+    steps: システムは修正内容を検証し、メインフローへ戻る。
+relations:
+  - relation_type: invokes
+    target_uc: メールアドレス確認

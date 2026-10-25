@@ -15,7 +15,10 @@ export interface ColumnConfig {
 export interface HeaderConfig {
   key: string;
   label: string;
+  type?: 'string' | 'multiline';
   required?: boolean;
+  pattern?: string;
+  pattern_error?: string;
 }
 
 export interface TableSchema {
@@ -23,10 +26,17 @@ export interface TableSchema {
   schema_version: string;
   title: string;
   headers?: HeaderConfig[];
+  header_layout?: 'horizontal' | 'vertical';
   columns: ColumnConfig[];
   subtables?: SubtableConfig[];
   markdown_template: string;
   row_number_width?: number;
+  scenario_heading?: ScenarioHeadingConfig;
+}
+
+export interface ScenarioHeadingConfig {
+  label?: string;
+  markdown_level?: number;
 }
 
 export interface SubtableConfig {
@@ -36,6 +46,7 @@ export interface SubtableConfig {
   kind?: 'default' | 'notes';
   note_ref_key?: string;
   row_number_width?: number;
+  scenario_heading?: ScenarioHeadingConfig;
 }
 
 export interface SpecData {

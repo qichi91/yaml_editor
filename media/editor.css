@@ -34,6 +34,46 @@ body {
 .header-form input {
   min-width: 440px;
 }
+.header-form textarea {
+  min-width: 440px;
+  min-height: 60px;
+  resize: vertical;
+}
+.header-form .header-field-error {
+  border-color: var(--error-border);
+  background-color: var(--error-bg);
+}
+.header-form.vertical {
+  display: block;
+}
+.header-fields-table {
+  display: table;
+  width: min(100%, 900px);
+  margin-top: 12px;
+  border-collapse: collapse;
+}
+.header-fields-table th,
+.header-fields-table td {
+  padding: 6px 8px;
+  border: 1px solid var(--border-color);
+}
+.header-fields-table tbody {
+  display: table-row-group;
+}
+.header-fields-table tr {
+  display: table-row;
+}
+.header-fields-table th {
+  width: 220px;
+  white-space: nowrap;
+}
+.header-fields-table td input,
+.header-fields-table td textarea {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  margin: 0;
+}
 .header-form select {
   background: var(--vscode-input-background, #3c3c3c);
   color: var(--vscode-input-foreground, #fff);

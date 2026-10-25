@@ -43,10 +43,28 @@ export class MarkdownGenerator {
     }).join('\n');
     tpl = tpl.replace(/\{\{notes_list\}\}/g, notesList);
 
+    const basicInfo = Array.isArray(data.basic_info) ? data.basic_info as Array<Record<string, any>> : [];
+    const basicInfoValues = new Map<string, string>();
+    basicInfo.forEach(row => {
+      const label = String(row.label ?? '');
+      if (label && !basicInfoValues.has(label)) {
+        basicInfoValues.set(label, String(row.value ?? ''));
+      }
+    });
+    tpl = tpl.replace(/\{\{basic_info:([^{}]+)\}\}/g, (_match, label: string) => {
+      const value = basicInfoValues.get(label) ?? '';
+      return value.replace(/\|/g, '\\|').replace(/\r?\n/g, '<br>');
+    });
+
     // ヘッダー共通項目の置換
+    const headerKeys = new Set((schema.headers || []).map(header => header.key));
     for (const [key, value] of Object.entries(data)) {
       if (key !== 'items' && key !== 'schema') {
-        tpl = tpl.replace(new RegExp(`\\{\\{${key}\\}\\}`, 'g'), (value ?? '').toString());
+        let text = (value ?? '').toString();
+        if (headerKeys.has(key)) {
+          text = text.replace(/\|/g, '\\|').replace(/\r?\n/g, '<br>');
+        }
+        tpl = tpl.replace(new RegExp(`\\{\\{${key}\\}\\}`, 'g'), text);
       }
     }
 
@@ -59,6 +77,9 @@ export class MarkdownGenerator {
       const columns = dataKey === 'items'
         ? cols
         : (schema.subtables?.find(subtable => subtable.data_key === dataKey)?.columns || []);
+      const scenarioHeading = dataKey === 'items'
+        ? schema.scenario_heading
+        : schema.subtables?.find(subtable => subtable.data_key === dataKey)?.scenario_heading;
       const rowNumbers = computeHierarchicalNumbers(rows);
       return rows.map((item, rowIndex) => {
         let row = rowTemplate.trim();
@@ -68,6 +89,13 @@ export class MarkdownGenerator {
           value = value.replace(/\|/g, '\\|').replace(/\r?\n/g, '<br>');
           row = row.replace(new RegExp(`\\{\\{${column.key}\\}\\}`, 'g'), value);
         });
+        if (scenarioHeading) {
+          const baseHeadingLevel = Math.min(6, Math.max(1, scenarioHeading.markdown_level || 3));
+          const hierarchyLevel = rowNumbers[rowIndex].split('-').length - 1;
+          const headingLevel = Math.min(6, baseHeadingLevel + hierarchyLevel);
+          const headingLabel = scenarioHeading.label || 'シナリオ';
+          row = `${'#'.repeat(headingLevel)} ${headingLabel}${rowNumbers[rowIndex]}\n\n${row}`;
+        }
         return row;
       }).join('\n');
     });
