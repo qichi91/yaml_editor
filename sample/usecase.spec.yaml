@@ -12,7 +12,12 @@ basic_info:
 actors:
   - name: 利用者
     description: アカウントを登録する。
+    _indent: 0
   - name: 運用担当者
+    description: 登録状況を確認する。
+    _indent: 0
+  - _indent: 0
+    name: 担当者
     description: 登録状況を確認する。
 conditions:
   - type: 事前条件

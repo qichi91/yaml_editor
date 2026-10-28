@@ -1067,6 +1067,157 @@ document.getElementById('import-main-table').addEventListener('click', event => 
   importWholeTable(schema.columns, 'items', renderRows, event.currentTarget);
 });
 
+const exportAllTablesButton = document.getElementById('export-all-tables');
+const importAllTablesButton = document.getElementById('import-all-tables');
+
+function getAllTableDefinitions() {
+  return [
+    { dataKey: 'items', title: 'メインテーブル', columns: schema.columns, heading: schema.scenario_heading },
+    ...(schema.subtables || []).map(subtable => ({
+      dataKey: subtable.data_key,
+      title: subtable.title,
+      columns: subtable.columns,
+      heading: subtable.scenario_heading
+    }))
+  ];
+}
+
+function buildAllTablesRows() {
+  const rows = [];
+  getAllTableDefinitions().forEach((table, index) => {
+    const items = Array.isArray(currentData[table.dataKey]) ? currentData[table.dataKey] : [];
+    const rowNumbers = computeHierarchicalNumbers(items)
+      .map(entry => formatRowNumber(entry, table.heading));
+    rows.push(
+      [`=== TABLE ${index + 1}: ${table.title} ===`],
+      ['#', ...table.columns.map(column => column.label)]
+    );
+    items.forEach((item, index) => {
+      rows.push([
+        rowNumbers[index],
+        ...table.columns.map(column => item[column.key] ?? '')
+      ]);
+    });
+  });
+
+  return rows;
+}
+
+function buildAllTablesTSV(rows) {
+  return rows.map(row => row.map(quoteTSVCell).join('\t')).join('\r\n');
+}
+
+function buildAllTablesHTML(rows) {
+  const htmlRows = rows.map(row => {
+    const isMarker = (row[0] || '').startsWith('=== TABLE ');
+    const cells = row.map((value, index) => {
+      const tag = !isMarker && row[0] === '#' ? 'th' : 'td';
+      const style = tag === 'td' && index > 0
+        ? ` style="mso-number-format:'\\@';"`
+        : '';
+      return `<${tag}${style}>${escapeHtml(String(value ?? ''))}</${tag}>`;
+    });
+    return `<tr>${cells.join('')}</tr>`;
+  });
+  return `<table border="1">${htmlRows.join('')}</table>`;
+}
+
+function quoteTSVCell(value) {
+  const text = String(value ?? '');
+  return /["\t\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+}
+
+function parseAllTablesTSV(text) {
+  const grid = parseTSV(text.replace(/^\uFEFF/, ''), false).map(row => {
+    const trimmedRow = [...row];
+    while (trimmedRow.length > 0 && trimmedRow[trimmedRow.length - 1].trim() === '') {
+      trimmedRow.pop();
+    }
+    return trimmedRow;
+  });
+  const definitions = getAllTableDefinitions();
+  const sections = new Map();
+  let currentSection = null;
+  for (const row of grid) {
+    const marker = /^=== TABLE (\d+): (.*) ===$/.exec((row[0] || '').trim());
+    if (marker) {
+      const sectionIndex = Number(marker[1]) - 1;
+      const definition = definitions[sectionIndex];
+      if (!definition || marker[2] !== definition.title || sections.has(sectionIndex)) {
+        throw new Error('一括エクスポート形式のテーブル見出しが不正または重複しています');
+      }
+      currentSection = sectionIndex;
+      sections.set(sectionIndex, []);
+    } else if (currentSection !== null) {
+      sections.get(currentSection).push(row);
+    }
+  }
+
+  if (sections.size !== definitions.length) {
+    throw new Error('一括インポートにはすべてのテーブルが必要です');
+  }
+  const importedData = { ...currentData };
+  definitions.forEach((table, sectionIndex) => {
+    const rows = sections.get(sectionIndex).filter(row => row.some(cell => cell.trim() !== ''));
+    const expectedHeader = ['#', ...table.columns.map(column => column.label)];
+    if (!rows.length || rows[0].map(cell => cell.trim()).join('\t') !== expectedHeader.join('\t')) {
+      throw new Error(`列見出しが一致しません: ${table.dataKey}`);
+    }
+    importedData[table.dataKey] = rows.slice(1).flatMap(row => {
+      const label = (row[0] || '').trim();
+      if (!label) return [];
+      const item = { _indent: computeIndentFromLabel(label) };
+      table.columns.forEach((column, index) => {
+        item[column.key] = row[index + 1] ?? '';
+      });
+      return isRowBlank(item, table.columns) ? [] : [item];
+    });
+  });
+
+  return importedData;
+}
+
+exportAllTablesButton.addEventListener('click', () => {
+  if (!navigator.clipboard || typeof navigator.clipboard.writeText !== 'function') {
+    showCopyResult(exportAllTablesButton, false);
+    return;
+  }
+  const rows = buildAllTablesRows();
+  const tsv = buildAllTablesTSV(rows);
+  const html = buildAllTablesHTML(rows);
+  const copyPromise = typeof ClipboardItem !== 'undefined' && typeof navigator.clipboard.write === 'function'
+    ? navigator.clipboard.write([new ClipboardItem({
+      'text/plain': new Blob([tsv], { type: 'text/plain' }),
+      'text/html': new Blob([html], { type: 'text/html' })
+    })]).catch(() => navigator.clipboard.writeText(tsv))
+    : navigator.clipboard.writeText(tsv);
+  copyPromise
+    .then(() => showCopyResult(exportAllTablesButton, true))
+    .catch(() => showCopyResult(exportAllTablesButton, false));
+});
+
+importAllTablesButton.addEventListener('click', () => {
+  if (!navigator.clipboard || typeof navigator.clipboard.readText !== 'function') {
+    showCopyResult(importAllTablesButton, false);
+    return;
+  }
+  navigator.clipboard.readText().then(text => {
+    const importedData = parseAllTablesTSV(text);
+    const mutated = commitBulkEdit(() => { currentData = importedData; });
+    if (mutated) {
+      vscode.postMessage({ type: 'replace', data: buildDirtyData() });
+    }
+    renderRows();
+    renderSubtables();
+    syncHeaderInputs();
+    showCopyResult(importAllTablesButton, true);
+  }).catch(error => {
+    console.error('一括インポートに失敗しました:', error);
+    vscode.postMessage({ type: 'error', message: `一括インポートに失敗しました: ${error.message}` });
+    showCopyResult(importAllTablesButton, false);
+  });
+});
+
 function clearRange() {
   const { minR, maxR, minC, maxC } = getSelectedBounds();
   const table = getActiveTable();
@@ -1134,7 +1285,7 @@ window.addEventListener('paste', (e) => {
   }
 });
 
-function parseTSV(text) {
+function parseTSV(text, trimCells = true) {
   const rows = [];
   let row = [];
   let cell = '';
@@ -1144,13 +1295,13 @@ function parseTSV(text) {
     if (c === '"') {
       if (inQ && n === '"') { cell += '"'; i++; }
       else inQ = !inQ;
-    } else if (c === '\t' && !inQ) { row.push(cell.trim()); cell = ''; }
+    } else if (c === '\t' && !inQ) { row.push(trimCells ? cell.trim() : cell); cell = ''; }
     else if ((c === '\r' || c === '\n') && !inQ) {
       if (c === '\r' && n === '\n') i++;
-      row.push(cell.trim()); rows.push(row); row = []; cell = '';
+      row.push(trimCells ? cell.trim() : cell); rows.push(row); row = []; cell = '';
     } else cell += c;
   }
-  if (cell || row.length > 0) { row.push(cell.trim()); rows.push(row); }
+  if (cell || row.length > 0) { row.push(trimCells ? cell.trim() : cell); rows.push(row); }
   return rows.filter(r => r.length > 1 || (r[0] && r[0].trim() !== ''));
 }
 

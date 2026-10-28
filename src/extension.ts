@@ -111,8 +111,8 @@ export async function activate(context: vscode.ExtensionContext) {
           }
         }
 
-        function mergeIncomingData(incomingData: SpecData): SpecData {
-          const currentData = parseDocument();
+        function mergeIncomingData(incomingData: SpecData, replace = false): SpecData {
+          const currentData = replace ? { schema: '', items: [] } as SpecData : parseDocument();
           const schema = schemaManager.getSchema(incomingData.schema);
           const incomingItems = Array.isArray(incomingData.items) ? incomingData.items : currentData.items || [];
           const mergedItems = incomingItems.map((newItem, idx) => ({
@@ -141,8 +141,8 @@ export async function activate(context: vscode.ExtensionContext) {
           return sanitizeForSave(finalData, buildColumnsByKey(schema));
         }
 
-        async function applyIncomingData(incomingData: SpecData): Promise<void> {
-          const finalData = mergeIncomingData(incomingData);
+        async function applyIncomingData(incomingData: SpecData, replace = false): Promise<void> {
+          const finalData = mergeIncomingData(incomingData, replace);
           const yamlText = yaml.dump(finalData, {
             sortKeys: false,
             lineWidth: -1,
@@ -167,10 +167,10 @@ export async function activate(context: vscode.ExtensionContext) {
           log(`YAML変更反映: ${document.uri.fsPath}, items=${finalData.items.length}`);
         }
 
-        function enqueueUpdate(incomingData: SpecData, saveAfterUpdate: boolean): void {
+        function enqueueUpdate(incomingData: SpecData, saveAfterUpdate: boolean, replace = false): void {
           updateQueue = updateQueue.then(async () => {
             const schemaChanged = lastSyncedSchemaId !== incomingData.schema;
-            await applyIncomingData(incomingData);
+            await applyIncomingData(incomingData, replace);
             if (schemaChanged) {
               log(`スキーマ変更、Webviewを再同期: ${lastSyncedSchemaId || '(未指定)'} -> ${incomingData.schema || '(未指定)'}`);
               syncToWebview();
@@ -204,6 +204,14 @@ export async function activate(context: vscode.ExtensionContext) {
           }
           if (message.type === 'save') {
             enqueueUpdate(message.data as SpecData, true);
+            return;
+          }
+          if (message.type === 'replace') {
+            enqueueUpdate(message.data as SpecData, false, true);
+            return;
+          }
+          if (message.type === 'error') {
+            vscode.window.showErrorMessage(String(message.message));
           }
         });
 
